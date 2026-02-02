@@ -52,6 +52,9 @@ body{
 
 .brand{ display:flex; align-items:center; gap:12px; min-width: 260px;}
 .brandMeta{ display:flex; flex-direction:column; gap:3px; }
+.brandTitleRow{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.miniPill{ border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.06); color:rgba(255,255,255,.88); padding:8px 12px; border-radius:999px; font-size:12px; letter-spacing:.03em; cursor:pointer; }
+.miniPill:active{ transform:translateY(1px); }
 .brandTitle{ font-size: 18px; font-weight: 600; letter-spacing: .2px; }
 .brandSub{ font-size: 12px; color: var(--muted); }
 
@@ -138,6 +141,9 @@ body{
 
 .divSwitch{ display:flex; gap:8px; flex-wrap:wrap; }
 .divBtn{
+  display:flex;
+  align-items:center;
+  gap: 8px;
   padding: 10px 14px;
   border-radius: 16px;
   border: 1px solid var(--line2);
@@ -147,6 +153,28 @@ body{
   font-size: 13px;
 }
 .divBtn.active{ background: rgba(255,255,255,.10); }
+
+/* Season switch button placed next to Div buttons */
+.seasonBtn{
+  min-width: 120px;
+  justify-content: center;
+  opacity: .95;
+}
+
+.divBtnLogo{
+  width: 22px;
+  height: 22px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: rgba(255,255,255,.06);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+  flex: 0 0 22px;
+}
+.divBtnLogo img{ width: 100%; height: 100%; object-fit: cover; display:block; }
+.divBtnLogoFallback{ font-size: 12px; color: var(--muted); }
 
 .cardHeader{
   padding: 14px 16px;
@@ -160,6 +188,35 @@ body{
 .smallHint{ font-size: 12px; color: var(--muted); }
 
 .tableWrap{ overflow:auto; }
+
+/* Rank color legend (順位カラー凡例) */
+.rankLegend{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  padding:12px 14px 6px;
+  border-top:1px solid rgba(255,255,255,.06);
+}
+.rankLegendItem{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 10px;
+  border-radius:999px;
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.06);
+  font-size:12px;
+  color:rgba(255,255,255,.78);
+}
+.rankLegendSwatch{
+  width:10px;
+  height:10px;
+  border-radius:999px;
+  box-shadow:0 0 0 1px rgba(0,0,0,.35) inset;
+}
+.rankLegendNote{
+  opacity:.75;
+}
 table{ width:100%; border-collapse:separate; border-spacing:0; }
 thead th{
   text-align:left;
@@ -497,3 +554,6 @@ td.colRank{
 .rankBandInner{
   height: 100% !important;
 }
+
+/* version marker */
+body{ outline-color: transparent; }

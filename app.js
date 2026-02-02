@@ -1,4 +1,4 @@
-// APP_VERSION: buttonfix-season-switcher-v1
+// APP_VERSION: season-add-fix-v1
 /* League UI - vanilla JS, localStorage persistence
    Features: multi-league, seasons, divisions, teams editable (name/logo/comment),
    standings with colors, schedule generation, results entry, club list & detail,
@@ -114,6 +114,35 @@
       for(const t of div.teams) map.set(t.id, {team:t, division:div});
     }
     return map;
+  }
+
+  // ===== Team Registry (league-wide) =====
+  function ensureTeamRegistryForLeague(league){
+    league.teamRegistry = league.teamRegistry || [];
+    if(Array.isArray(league.seasons)){
+      for(const s of league.seasons){
+        if(!Array.isArray(s.divisions)) continue;
+        for(const d of s.divisions){
+          if(!Array.isArray(d.teams)) continue;
+          for(const t of d.teams){
+            addTeamToRegistryIfMissing(league, t);
+          }
+        }
+      }
+    }
+    return league.teamRegistry;
+  }
+
+  function addTeamToRegistryIfMissing(league, team){
+    if(!team || !team.id) return;
+    league.teamRegistry = league.teamRegistry || [];
+    if(league.teamRegistry.some(x => x.id === team.id)) return;
+    league.teamRegistry.push({
+      id: team.id,
+      name: team.name || "Team",
+      logoDataUrl: team.logoDataUrl || null,
+      comment: team.comment || ""
+    });
   }
 
   function setLogo(imgEl, fallbackEl, dataUrl){
@@ -335,6 +364,13 @@
       };
       divSwitchEl.appendChild(btn);
     }
+
+    // Season switch button (placed next to Div buttons)
+    const sBtn = document.createElement('button');
+    sBtn.className = 'divBtn seasonBtn';
+    sBtn.textContent = season.name || 'Season';
+    sBtn.onclick = () => openLeagueSeasonSwitcher();
+    divSwitchEl.appendChild(sBtn);
   }
 
   function renderStandings(){
@@ -443,7 +479,37 @@
 
     // Update lastRankMap AFTER drawing
     div.lastRankMap = nextRankMap;
+
+    // Rank color legend (順位カラー凡例)
+    renderRankLegend(div);
+
     saveDB();
+  }
+
+  function renderRankLegend(div){
+    const el = $('rankLegend');
+    if(!el) return;
+    const rules = (div.rankColors || [])
+      .filter(r=>r && (r.name||'').trim() && (r.color||'').trim())
+      .slice()
+      .sort((a,b)=>(a.start||0)-(b.start||0));
+
+    if(!rules.length){
+      el.innerHTML = '';
+      return;
+    }
+
+    el.innerHTML = rules.map(r=>{
+      const name = escapeHtml((r.name||'').trim());
+      const color = escapeHtml((r.color||'#ffffff').trim());
+      const start = Number(r.start || 1);
+      const end = Number(r.end || start);
+      return `<div class="rankLegendItem">`+
+             `<span class="rankLegendSwatch" style="background:${color}"></span>`+
+             `<span class="rankLegendText">ー${name}</span>`+
+             `<span class="rankLegendNote">(${start}〜${end})</span>`+
+             `</div>`;
+    }).join('');
   }
 
   function maxRound(div){
@@ -616,7 +682,7 @@
     root.appendChild(sectionTitle('シーズン'));
     const seasonRow = document.createElement('div');
     seasonRow.className='btnRow';
-    seasonRow.appendChild(btn('＋新シーズン', ()=> { createNextSeason(); toast('新シーズンを作成しました'); closeModal(); render(); }));
+    seasonRow.appendChild(btn('＋新シーズン', ()=> { addSeasonFlow(); closeModal(); render(); }));
     seasonRow.appendChild(btn('シーズン削除', ()=> confirmDelete('このシーズンを削除しますか？', ()=>{
       deleteSeason(season.id); closeModal(); render();
     }), 'danger'));
@@ -651,6 +717,222 @@
     ]);
 
     openModal('管理', root, footer);
+  }
+
+  // =====================
+  // 登録チーム一覧（リーグ共通台帳）
+  // =====================
+  function openTeamRegistryModal(){
+    const league = getLeague();
+    ensureTeamRegistryForLeague(league);
+
+    const root = document.createElement('div');
+    root.className = 'stack';
+
+    const hint = document.createElement('div');
+    hint.className = 'muted';
+    hint.textContent = 'このリーグ共通のチーム台帳です。エンブレム・名前・コメントを編集できます。';
+    root.appendChild(hint);
+
+    const list = document.createElement('div');
+    list.className = 'stack';
+    root.appendChild(list);
+
+    const renderList = () => {
+      list.innerHTML = '';
+      league.teamRegistry.forEach((t, idx)=>{
+        const row = document.createElement('div');
+        row.className = 'cardRow';
+
+        const left = document.createElement('div');
+        left.className = 'row';
+        left.style.gap = '10px';
+
+        const icon = document.createElement('div');
+        icon.className = 'miniLogo';
+        if(t.logoDataUrl){
+          icon.style.backgroundImage = `url(${t.logoDataUrl})`;
+          icon.style.backgroundSize = 'cover';
+          icon.style.backgroundPosition = 'center';
+        }
+
+        const meta = document.createElement('div');
+        const title = document.createElement('div');
+        title.textContent = t.name || `Team${idx+1}`;
+        const sub = document.createElement('div');
+        sub.className = 'muted';
+        sub.textContent = (t.comment || '').slice(0, 40);
+        meta.appendChild(title);
+        meta.appendChild(sub);
+
+        left.appendChild(icon);
+        left.appendChild(meta);
+
+        const right = document.createElement('div');
+        right.className = 'row';
+        right.style.gap = '8px';
+        const bEdit = btn('編集', ()=>openRegistryTeamEditor(t.id, renderList));
+        const bDel = btn('削除', ()=>{
+          if(!confirm('このチームを台帳から削除しますか？（過去シーズンのデータ参照に影響します）')) return;
+          league.teamRegistry = league.teamRegistry.filter(x=>x.id!==t.id);
+          // Orphaned team instances keep their own copy; we simply remove ledger entry
+          saveDB();
+          renderList();
+          render();
+        });
+        right.appendChild(bEdit);
+        right.appendChild(bDel);
+
+        row.appendChild(left);
+        row.appendChild(right);
+        list.appendChild(row);
+      });
+    };
+
+    const actions = document.createElement('div');
+    actions.className = 'btnRow';
+    actions.appendChild(btn('＋チーム追加', ()=>{
+      const id = nowId();
+      const name = nextDefaultTeamName(league);
+      league.teamRegistry.push({ id, name, logoDataUrl:'', comment:'' });
+      // 新規追加したチームは台帳に登録されるだけ（ディビジョンには自動で入りません）
+      saveDB();
+      renderList();
+    }));
+    actions.appendChild(btn('閉じる', ()=>closeModal()));
+    root.appendChild(actions);
+
+    openModal('登録チーム一覧', root);
+    renderList();
+  }
+
+  function openRegistryTeamEditor(teamRegId, onSaved){
+    const league = getLeague();
+    ensureTeamRegistryForLeague(league);
+    const regTeam = league.teamRegistry.find(t=>t.id===teamRegId);
+    if(!regTeam) return;
+
+    const root = document.createElement('div');
+    root.className = 'stack';
+
+    const logoBtn = btn('エンブレム画像を選択', async ()=>{
+      const file = await pickImageFile();
+      if(!file) return;
+      const dataUrl = await readAsDataURL(file);
+      regTeam.logoDataUrl = dataUrl;
+      syncRegistryToAllTeamInstances(league, regTeam.id);
+      saveDB();
+      render();
+    });
+    root.appendChild(logoBtn);
+
+    const nameIn = input('チーム名', regTeam.name||'');
+    const memo = textarea('コメント / メモ', regTeam.comment||'');
+    root.appendChild(nameIn.wrap);
+    root.appendChild(memo.wrap);
+
+    const actions = document.createElement('div');
+    actions.className = 'btnRow';
+    actions.appendChild(btn('保存', ()=>{
+      regTeam.name = nameIn.input.value.trim() || regTeam.name;
+      regTeam.comment = memo.ta.value;
+      syncRegistryToAllTeamInstances(league, regTeam.id);
+      saveDB();
+      closeModal();
+      if(onSaved) onSaved();
+      render();
+    }));
+    actions.appendChild(btn('閉じる', ()=>closeModal()));
+    root.appendChild(actions);
+    openModal('台帳チーム編集', root);
+  }
+
+  function openRegistryPickerForDivision(div, onDone){
+    const league = getLeague();
+    ensureTeamRegistryForLeague(league);
+
+    const root = document.createElement('div');
+    root.className = 'stack';
+    const hint = document.createElement('div');
+    hint.className = 'muted';
+    hint.textContent = '追加したいチームをタップしてください。';
+    root.appendChild(hint);
+
+    const list = document.createElement('div');
+    list.className = 'stack';
+    root.appendChild(list);
+
+    const renderList = () => {
+      list.innerHTML = '';
+      league.teamRegistry.forEach((t, idx)=>{
+        const row = document.createElement('div');
+        row.className = 'cardRow clickable';
+        const left = document.createElement('div');
+        left.className = 'row';
+        left.style.gap = '10px';
+        const icon = document.createElement('div');
+        icon.className = 'miniLogo';
+        if(t.logoDataUrl){
+          icon.style.backgroundImage = `url(${t.logoDataUrl})`;
+          icon.style.backgroundSize = 'cover';
+          icon.style.backgroundPosition = 'center';
+        }
+        const name = document.createElement('div');
+        name.textContent = t.name || `Team${idx+1}`;
+        left.appendChild(icon);
+        left.appendChild(name);
+        row.appendChild(left);
+
+        row.onclick = () => {
+          // Prevent duplicates in same division by baseId
+          if(div.teams.some(x=>x.baseId===t.id)){
+            alert('このディビジョンには既に登録されています。');
+            return;
+          }
+          div.teams.push({ id: nowId(), baseId: t.id, name: t.name, logoDataUrl: t.logoDataUrl||'', comment: t.comment||'' });
+          saveDB();
+          closeModal();
+          if(onDone) onDone();
+          render();
+        };
+        list.appendChild(row);
+      });
+    };
+
+    const actions = document.createElement('div');
+    actions.className = 'btnRow';
+    actions.appendChild(btn('＋新規チーム追加', ()=>{
+      const id = nowId();
+      const name = nextDefaultTeamName(league);
+      league.teamRegistry.push({ id, name, logoDataUrl:'', comment:'' });
+      div.teams.push({ id: nowId(), baseId: id, name, logoDataUrl:'', comment:'' });
+      syncRegistryToAllTeamInstances(league, id);
+      saveDB();
+      closeModal();
+      if(onDone) onDone();
+      render();
+    }));
+    actions.appendChild(btn('閉じる', ()=>closeModal()));
+    root.appendChild(actions);
+
+    openModal('台帳から追加', root);
+    renderList();
+  }
+
+  function syncRegistryToAllTeamInstances(league, baseId){
+    const regTeam = league.teamRegistry.find(t=>t.id===baseId);
+    if(!regTeam) return;
+    league.seasons.forEach(s=>{
+      s.divisions.forEach(d=>{
+        d.teams.forEach(tm=>{
+          if(tm.baseId===baseId){
+            tm.name = regTeam.name;
+            tm.logoDataUrl = regTeam.logoDataUrl;
+            tm.comment = regTeam.comment;
+          }
+        });
+      });
+    });
   }
 
   function openDivisionEditModal(divisionId){
@@ -691,12 +973,22 @@
       root.appendChild(row);
     }
 
-    root.appendChild(btn('＋チーム追加', ()=>{
+    const addRow = document.createElement('div');
+    addRow.className = 'btnRow';
+    addRow.appendChild(btn('＋台帳から追加', ()=>{
+      openRegistryPickerForDivision(div, ()=>{
+        closeModal();
+        openDivisionEditModal(div.id);
+        render();
+      });
+    }));
+    addRow.appendChild(btn('＋新規チーム追加', ()=>{
       addTeam(div.id);
       closeModal();
       openDivisionEditModal(div.id);
       render();
     }));
+    root.appendChild(addRow);
 
     const footer = footerButtons([
       {text:'戻る', onClick: ()=> { closeModal(); openManageModal(); }},
@@ -1099,15 +1391,16 @@ root.appendChild(box);
   }
 
   // --- Season operations
-  function createNextSeason(){
+  function createNextSeason(nameOverride){
     const league = getLeague();
     const current = getSeason();
     // number suffix
     const m = (current.name||'').match(/(\d+)/);
     const nextN = m ? (parseInt(m[1],10)+1) : (league.seasons.length+1);
+    const desiredName = (nameOverride && String(nameOverride).trim()) ? String(nameOverride).trim() : null;
     const newSeason = {
       id: nowId(),
-      name: `Season ${nextN}`,
+      name: desiredName || `Season ${nextN}`,
       createdAt: Date.now(),
       endedAt: null,
       divisions: JSON.parse(JSON.stringify(current.divisions)).map(d=>{
@@ -1126,6 +1419,136 @@ root.appendChild(box);
     db.selected.divisionId = newSeason.divisions[0]?.id || newSeason.id;
     db.selected.round = 1;
     saveDB();
+  }
+
+  // シーズン追加（リーグは増やさない）
+  function addSeasonFlow(){
+    const league = getLeague();
+    if(!league) return;
+    const current = getSeason();
+    const nextIndex = (league.seasons?.length || 0) + 1;
+
+    // Build modal UI: season name + team inheritance selection per division
+    const root = document.createElement('div');
+    root.className = 'modalBody';
+
+    const nameRow = document.createElement('div');
+    nameRow.className = 'row';
+    nameRow.innerHTML = `
+      <div class="field">
+        <div class="label">シーズン名</div>
+        <input id="newSeasonName" class="input" placeholder="Season ${nextIndex}" value="Season ${nextIndex}" />
+        <div class="hint">次シーズンに移った時も前のシーズンへ戻って確認できます。</div>
+      </div>
+    `;
+    root.appendChild(nameRow);
+
+    const inheritTitle = document.createElement('div');
+    inheritTitle.className = 'subTitle';
+    inheritTitle.textContent = 'チーム編成（前シーズンから選択して引き継ぎ）';
+    root.appendChild(inheritTitle);
+
+    const inheritWrap = document.createElement('div');
+    inheritWrap.className = 'inheritWrap';
+
+    for(const div of (current.divisions || [])){
+      const box = document.createElement('div');
+      box.className = 'inheritBox';
+      const divName = escapeHtml(div.name || 'Div');
+      const teams = div.teams || [];
+
+      const teamList = teams.map(t=>{
+        const tid = String(t.id);
+        const label = escapeHtml(t.name || 'Team');
+        return `
+          <label class="inheritItem">
+            <input type="checkbox" data-div="${escapeAttr(div.id)}" data-team="${escapeAttr(tid)}" checked />
+            <span class="inheritText">${label}</span>
+          </label>
+        `;
+      }).join('');
+
+      box.innerHTML = `
+        <div class="inheritHead">
+          <div class="inheritName">${divName}</div>
+          <div class="inheritActions">
+            <button class="miniBtn" data-action="all" data-div="${escapeAttr(div.id)}">全選択</button>
+            <button class="miniBtn" data-action="none" data-div="${escapeAttr(div.id)}">クリア</button>
+          </div>
+        </div>
+        <div class="inheritList">${teamList || '<div class="muted">チームがありません（管理 → チーム追加で作成できます）</div>'}</div>
+      `;
+      inheritWrap.appendChild(box);
+    }
+    root.appendChild(inheritWrap);
+
+    // Wire up mini actions
+    root.addEventListener('click', (e)=>{
+      const btn = e.target.closest('button.miniBtn');
+      if(!btn) return;
+      const divId = btn.getAttribute('data-div');
+      const act = btn.getAttribute('data-action');
+      root.querySelectorAll('input[type=checkbox][data-div]').forEach(cb=>{
+        if(cb.getAttribute('data-div') !== divId) return;
+        cb.checked = (act === 'all');
+      });
+    });
+
+    const footer = createModalFooter([
+      {text:'閉じる', onClick: closeModal},
+      {text:'作成', primary:true, onClick: ()=>{
+        const nameInput = root.querySelector('#newSeasonName');
+        const seasonName = (nameInput?.value || '').trim() || `Season ${nextIndex}`;
+
+        // collect selection
+        const selected = {};
+        root.querySelectorAll('input[type=checkbox][data-div][data-team]').forEach(cb=>{
+          const d = cb.getAttribute('data-div');
+          const t = cb.getAttribute('data-team');
+          if(!selected[d]) selected[d] = [];
+          if(cb.checked) selected[d].push(t);
+        });
+
+        // build next season (copy divisions, keep club ids, reset matches)
+        const newSeason = {
+          id: nowId(),
+          name: seasonName,
+          createdAt: Date.now(),
+          endedAt: null,
+          divisions: (current.divisions || []).map(div=>{
+            const keepIds = new Set(selected[div.id] || []);
+            const keptTeams = (div.teams || []).filter(t=>keepIds.has(String(t.id)))
+              .map(t=>({
+                id: t.id,
+                name: t.name,
+                logoDataUrl: t.logoDataUrl || '',
+                comment: t.comment || ''
+              }));
+            return {
+              id: nowId(),
+              name: div.name,
+              emblemDataUrl: div.emblemDataUrl || '',
+              teams: keptTeams,
+              matches: [],
+              roundCount: div.roundCount || 0,
+              rankColors: JSON.parse(JSON.stringify(div.rankColors || [])),
+              lastRankMap: {}
+            };
+          }),
+          history: current.history || {}
+        };
+
+        league.seasons.push(newSeason);
+        db.selected.seasonId = newSeason.id;
+        db.selected.divisionId = newSeason.divisions[0]?.id || newSeason.id;
+        db.selected.round = 1;
+        saveDB();
+        closeModal();
+        renderAll();
+        toast('シーズンを追加しました');
+      }}
+    ]);
+    openModal('新シーズン作成', root, footer);
   }
 
   function endSeason(){ endSeasonWithMatches(); }
@@ -1218,11 +1641,16 @@ root.appendChild(box);
   }
 
   function addTeam(divId){
+    const league = getLeague();
+    ensureTeamRegistryForLeague(league);
     const season = getSeason();
     const div = season.divisions.find(d=>d.id===divId);
     if(!div) return;
+    const regName = nextDefaultTeamName(league);
+    const regTeam = { id: nowId(), name: regName, logoDataUrl:'', comment:'' };
+    league.teamRegistry.push(regTeam);
     const idx = div.teams.length+1;
-    div.teams.push({ id: nowId(), name: `Team${idx}`, logoDataUrl:'', comment:'' });
+    div.teams.push({ id: nowId(), baseId: regTeam.id, name: regName, logoDataUrl:'', comment:'' });
     // schedule becomes invalid; keep but warn
     saveDB();
     toast('チームを追加しました（必要なら日程を再生成）');
@@ -1419,6 +1847,440 @@ root.appendChild(box);
     renderAll();
   }
 
+  // ===== チーム台帳（リーグ共通） =====
+  function propagateRegistryTeamToAll(league, team){
+    if(!Array.isArray(league.seasons)) return;
+    for(const s of league.seasons){
+      if(!Array.isArray(s.divisions)) continue;
+      for(const d of s.divisions){
+        if(!Array.isArray(d.teams)) continue;
+        for(const t of d.teams){
+          if(t.id === team.id){
+            t.name = team.name;
+            t.logoDataUrl = team.logoDataUrl || '';
+            t.comment = team.comment || '';
+          }
+        }
+      }
+    }
+  }
+
+  function openRegistryModal(){
+    const league = getLeague();
+    ensureTeamRegistryForLeague(league);
+
+    const root = document.createElement('div');
+    root.appendChild(sectionTitle('登録チーム一覧'));
+
+    const desc = document.createElement('div');
+    desc.className = 'hint';
+    desc.textContent = 'リーグ共通のチーム台帳です。ここで追加したチームは、各シーズン/ディビジョン編成で選べます。';
+    root.appendChild(desc);
+
+    const list = document.createElement('div');
+    list.style.display='flex';
+    list.style.flexDirection='column';
+    list.style.gap='10px';
+
+    const renderList = ()=>{
+      list.innerHTML='';
+      if(league.teamRegistry.length===0){
+        const empty = document.createElement('div');
+        empty.className='hint';
+        empty.textContent='まだ登録チームがありません。下の「+ チーム追加」から作成してください。';
+        list.appendChild(empty);
+        return;
+      }
+      league.teamRegistry.forEach(t=>{
+        const row = document.createElement('div');
+        row.className='teamRow';
+
+        const left = document.createElement('div');
+        left.style.display='flex';
+        left.style.alignItems='center';
+        left.style.gap='10px';
+
+        const logo = document.createElement('div');
+        logo.className='teamLogo';
+        if(t.logoDataUrl){
+          const img = document.createElement('img');
+          img.src = t.logoDataUrl;
+          img.alt = '';
+          logo.appendChild(img);
+        } else {
+          logo.innerHTML = '<span class="flag">🏳️</span>';
+        }
+
+        const meta = document.createElement('div');
+        meta.style.display='flex';
+        meta.style.flexDirection='column';
+        meta.style.gap='2px';
+        const name = document.createElement('div');
+        name.textContent = t.name || '(no name)';
+        const c = document.createElement('div');
+        c.className='hint';
+        c.textContent = t.comment ? t.comment : 'コメントなし';
+        meta.appendChild(name);
+        meta.appendChild(c);
+
+        left.appendChild(logo);
+        left.appendChild(meta);
+
+        const right = document.createElement('div');
+        right.className='btnRow';
+
+        const bEdit = pill('編集');
+        bEdit.onclick = ()=> openRegistryTeamEditModal(t.id);
+        const bDel = pill('削除','danger');
+        bDel.onclick = ()=>{
+          if(!confirm(`${t.name} を台帳から削除しますか？\n（このチームが編成済みのディビジョンからは自動では消しません）`)) return;
+          league.teamRegistry = league.teamRegistry.filter(x=>x.id!==t.id);
+          saveDB();
+          renderList();
+        };
+        right.appendChild(bEdit);
+        right.appendChild(bDel);
+
+        row.appendChild(left);
+        row.appendChild(right);
+        list.appendChild(row);
+      });
+    };
+
+    renderList();
+    root.appendChild(list);
+
+    const controls = document.createElement('div');
+    controls.className='btnRow';
+    const bAdd = pill('+ チーム追加','primary');
+    bAdd.onclick = ()=> openRegistryTeamEditModal(null);
+    controls.appendChild(bAdd);
+
+    const bClose = pill('閉じる');
+    bClose.onclick = closeModal;
+    controls.appendChild(bClose);
+
+    root.appendChild(hr());
+    root.appendChild(controls);
+
+    openModal(root);
+
+    function openRegistryTeamEditModal(teamId){
+      const isNew = !teamId;
+      const team = isNew ? { id: uid(), name:'Team' + (league.teamRegistry.length+1), logoDataUrl:'', comment:'' } : (league.teamRegistry.find(x=>x.id===teamId));
+      if(!team) return;
+
+      const form = document.createElement('div');
+      form.appendChild(sectionTitle(isNew ? 'チーム追加' : 'チーム編集'));
+
+      const nameWrap = field('チーム名');
+      const nameInput = document.createElement('input');
+      nameInput.value = team.name || '';
+      nameWrap.appendChild(nameInput);
+
+      const commentWrap = field('コメント');
+      const ta = document.createElement('textarea');
+      ta.placeholder='チーム紹介 / メモ';
+      ta.value = team.comment || '';
+      commentWrap.appendChild(ta);
+
+      const logoWrap = field('エンブレム');
+      const preview = document.createElement('div');
+      preview.className='logoBox';
+      preview.style.width='64px';
+      preview.style.height='64px';
+      preview.style.borderRadius='18px';
+      preview.style.display='grid';
+      preview.style.placeItems='center';
+      preview.style.overflow='hidden';
+      if(team.logoDataUrl){
+        const img = document.createElement('img');
+        img.src = team.logoDataUrl;
+        img.style.width='100%';
+        img.style.height='100%';
+        img.style.objectFit='cover';
+        preview.appendChild(img);
+      } else {
+        preview.innerHTML = '<span class="flag">🏳️</span>';
+      }
+
+      const fileInput = document.createElement('input');
+      fileInput.type='file';
+      fileInput.accept='image/*';
+      fileInput.onchange = async ()=>{
+        const f = fileInput.files && fileInput.files[0];
+        if(!f) return;
+        const data = await readFileAsDataURL(f);
+        team.logoDataUrl = data;
+        preview.innerHTML='';
+        const img = document.createElement('img');
+        img.src = data;
+        img.style.width='100%';
+        img.style.height='100%';
+        img.style.objectFit='cover';
+        preview.appendChild(img);
+      };
+
+      const row = document.createElement('div');
+      row.className='btnRow';
+      row.style.justifyContent='flex-start';
+      row.style.alignItems='center';
+      row.appendChild(preview);
+      row.appendChild(fileInput);
+      logoWrap.appendChild(row);
+
+      form.appendChild(nameWrap);
+      form.appendChild(logoWrap);
+      form.appendChild(commentWrap);
+
+      const actions = document.createElement('div');
+      actions.className='btnRow';
+      const bSave = pill('保存','primary');
+      bSave.onclick = ()=>{
+        team.name = nameInput.value.trim() || team.name;
+        team.comment = ta.value || '';
+
+        if(isNew){
+          league.teamRegistry.push(team);
+        } else {
+          const idx = league.teamRegistry.findIndex(x=>x.id===team.id);
+          if(idx>=0) league.teamRegistry[idx] = team;
+        }
+        propagateRegistryTeamToAll(league, team);
+        saveDB();
+        closeModal();
+        // reopen registry
+        openRegistryModal();
+      };
+      const bCancel = pill('閉じる');
+      bCancel.onclick = closeModal;
+      actions.appendChild(bCancel);
+      actions.appendChild(bSave);
+
+      form.appendChild(hr());
+      form.appendChild(actions);
+
+      openModal(form);
+    }
+  }
+
+
+  // ===== チーム台帳（リーグ共通） =====
+  function propagateRegistryTeamToAll(league, team){
+    if(!Array.isArray(league.seasons)) return;
+    for(const s of league.seasons){
+      if(!Array.isArray(s.divisions)) continue;
+      for(const d of s.divisions){
+        if(!Array.isArray(d.teams)) continue;
+        for(const t of d.teams){
+          if(t.id === team.id){
+            t.name = team.name;
+            t.logoDataUrl = team.logoDataUrl || '';
+            t.comment = team.comment || '';
+          }
+        }
+      }
+    }
+  }
+
+  function openRegistryModal(){
+    const league = getLeague();
+    ensureTeamRegistryForLeague(league);
+
+    const root = document.createElement('div');
+    root.appendChild(sectionTitle('登録チーム一覧'));
+
+    const desc = document.createElement('div');
+    desc.className = 'hint';
+    desc.textContent = 'リーグ共通のチーム台帳です。ここで追加したチームは、各シーズン/ディビジョン編成で選べます。';
+    root.appendChild(desc);
+
+    const list = document.createElement('div');
+    list.style.display='flex';
+    list.style.flexDirection='column';
+    list.style.gap='10px';
+
+    const renderList = ()=>{
+      list.innerHTML='';
+      if(league.teamRegistry.length===0){
+        const empty = document.createElement('div');
+        empty.className='hint';
+        empty.textContent='まだ登録チームがありません。下の「+ チーム追加」から作成してください。';
+        list.appendChild(empty);
+        return;
+      }
+      league.teamRegistry.forEach(t=>{
+        const row = document.createElement('div');
+        row.className='teamRow';
+
+        const left = document.createElement('div');
+        left.style.display='flex';
+        left.style.alignItems='center';
+        left.style.gap='10px';
+
+        const logo = document.createElement('div');
+        logo.className='teamLogo';
+        if(t.logoDataUrl){
+          const img = document.createElement('img');
+          img.src = t.logoDataUrl;
+          img.alt = '';
+          logo.appendChild(img);
+        } else {
+          logo.innerHTML = '<span class="flag">🏳️</span>';
+        }
+
+        const meta = document.createElement('div');
+        meta.style.display='flex';
+        meta.style.flexDirection='column';
+        meta.style.gap='2px';
+        const name = document.createElement('div');
+        name.textContent = t.name || '(no name)';
+        const c = document.createElement('div');
+        c.className='hint';
+        c.textContent = t.comment ? t.comment : 'コメントなし';
+        meta.appendChild(name);
+        meta.appendChild(c);
+
+        left.appendChild(logo);
+        left.appendChild(meta);
+
+        const right = document.createElement('div');
+        right.className='btnRow';
+
+        const bEdit = pill('編集');
+        bEdit.onclick = ()=> openRegistryTeamEditModal(t.id);
+        const bDel = pill('削除','danger');
+        bDel.onclick = ()=>{
+          if(!confirm(`${t.name} を台帳から削除しますか？\n（このチームが編成済みのディビジョンからは自動では消しません）`)) return;
+          league.teamRegistry = league.teamRegistry.filter(x=>x.id!==t.id);
+          saveDB();
+          renderList();
+        };
+        right.appendChild(bEdit);
+        right.appendChild(bDel);
+
+        row.appendChild(left);
+        row.appendChild(right);
+        list.appendChild(row);
+      });
+    };
+
+    renderList();
+    root.appendChild(list);
+
+    const controls = document.createElement('div');
+    controls.className='btnRow';
+    const bAdd = pill('+ チーム追加','primary');
+    bAdd.onclick = ()=> openRegistryTeamEditModal(null);
+    controls.appendChild(bAdd);
+
+    const bClose = pill('閉じる');
+    bClose.onclick = closeModal;
+    controls.appendChild(bClose);
+
+    root.appendChild(hr());
+    root.appendChild(controls);
+
+    openModal(root);
+
+    function openRegistryTeamEditModal(teamId){
+      const isNew = !teamId;
+      const team = isNew ? { id: uid(), name:'Team' + (league.teamRegistry.length+1), logoDataUrl:'', comment:'' } : (league.teamRegistry.find(x=>x.id===teamId));
+      if(!team) return;
+
+      const form = document.createElement('div');
+      form.appendChild(sectionTitle(isNew ? 'チーム追加' : 'チーム編集'));
+
+      const nameWrap = field('チーム名');
+      const nameInput = document.createElement('input');
+      nameInput.value = team.name || '';
+      nameWrap.appendChild(nameInput);
+
+      const commentWrap = field('コメント');
+      const ta = document.createElement('textarea');
+      ta.placeholder='チーム紹介 / メモ';
+      ta.value = team.comment || '';
+      commentWrap.appendChild(ta);
+
+      const logoWrap = field('エンブレム');
+      const preview = document.createElement('div');
+      preview.className='logoBox';
+      preview.style.width='64px';
+      preview.style.height='64px';
+      preview.style.borderRadius='18px';
+      preview.style.display='grid';
+      preview.style.placeItems='center';
+      preview.style.overflow='hidden';
+      if(team.logoDataUrl){
+        const img = document.createElement('img');
+        img.src = team.logoDataUrl;
+        img.style.width='100%';
+        img.style.height='100%';
+        img.style.objectFit='cover';
+        preview.appendChild(img);
+      } else {
+        preview.innerHTML = '<span class="flag">🏳️</span>';
+      }
+
+      const fileInput = document.createElement('input');
+      fileInput.type='file';
+      fileInput.accept='image/*';
+      fileInput.onchange = async ()=>{
+        const f = fileInput.files && fileInput.files[0];
+        if(!f) return;
+        const data = await readFileAsDataURL(f);
+        team.logoDataUrl = data;
+        preview.innerHTML='';
+        const img = document.createElement('img');
+        img.src = data;
+        img.style.width='100%';
+        img.style.height='100%';
+        img.style.objectFit='cover';
+        preview.appendChild(img);
+      };
+
+      const row = document.createElement('div');
+      row.className='btnRow';
+      row.style.justifyContent='flex-start';
+      row.style.alignItems='center';
+      row.appendChild(preview);
+      row.appendChild(fileInput);
+      logoWrap.appendChild(row);
+
+      form.appendChild(nameWrap);
+      form.appendChild(logoWrap);
+      form.appendChild(commentWrap);
+
+      const actions = document.createElement('div');
+      actions.className='btnRow';
+      const bSave = pill('保存','primary');
+      bSave.onclick = ()=>{
+        team.name = nameInput.value.trim() || team.name;
+        team.comment = ta.value || '';
+
+        if(isNew){
+          league.teamRegistry.push(team);
+        } else {
+          const idx = league.teamRegistry.findIndex(x=>x.id===team.id);
+          if(idx>=0) league.teamRegistry[idx] = team;
+        }
+        propagateRegistryTeamToAll(league, team);
+        saveDB();
+        closeModal();
+        // reopen registry
+        openRegistryModal();
+      };
+      const bCancel = pill('閉じる');
+      bCancel.onclick = closeModal;
+      actions.appendChild(bCancel);
+      actions.appendChild(bSave);
+
+      form.appendChild(hr());
+      form.appendChild(actions);
+
+      openModal(form);
+    }
+  }
 // --- Switcher modals (League / Season)
 function openLeagueSeasonSwitcher(){
   const root = document.createElement('div');
@@ -1567,6 +2429,8 @@ function openSeasonMatchesModal(teamId, payload){
   });
 
   byId('btnManage').addEventListener('click', openManageModal);
+  const regBtn = document.getElementById('btnRegistry');
+  if(regBtn) regBtn.addEventListener('click', openTeamRegistryModal);
   byId('btnRankColors').addEventListener('click', openRankColorsModal);
   byId('btnHistory').addEventListener('click', openHistoryModal);
 
@@ -1598,8 +2462,8 @@ function openSeasonMatchesModal(teamId, payload){
   });
 
   byId('btnNewSeason').addEventListener('click', ()=>{
-    createNextSeason();
-    toast('新シーズンに移行しました');
+    addSeasonFlow();
+    toast('新シーズンを追加しました');
     render();
   });
 
