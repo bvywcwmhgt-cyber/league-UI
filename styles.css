@@ -1,8 +1,8 @@
 /* League UI - tablet friendly, dark glass */
 :root{
-  --bg:#070a13;
-  --glass: rgba(18,26,44,.62);
-  --glass2: rgba(18,26,44,.45);
+  --bg:#05070d;
+  --glass: rgba(12,18,34,.70);
+  --glass2: rgba(12,18,34,.55);
   --line: rgba(255,255,255,.08);
   --line2: rgba(255,255,255,.12);
   --txt: rgba(255,255,255,.92);
@@ -25,10 +25,10 @@ body{
   font-family: var(--font);
   color: var(--txt);
   background:
-    radial-gradient(1200px 600px at 20% 20%, rgba(75,120,255,.18), transparent 60%),
-    radial-gradient(900px 500px at 80% 30%, rgba(255,90,220,.12), transparent 55%),
-    radial-gradient(800px 600px at 40% 85%, rgba(60,255,190,.08), transparent 60%),
-    linear-gradient(180deg, #040713, #050713 40%, #040612);
+    radial-gradient(1200px 600px at 20% 20%, rgba(55,90,210,.12), transparent 62%),
+    radial-gradient(900px 520px at 82% 28%, rgba(210,70,190,.08), transparent 58%),
+    radial-gradient(900px 650px at 45% 88%, rgba(50,220,170,.06), transparent 62%),
+    linear-gradient(180deg, #03040a, #040611 45%, #020309);
   overflow-x:hidden;
 }
 
@@ -178,7 +178,7 @@ tbody td{
   white-space:nowrap;
 }
 
-.colRank{ width: 90px; }
+.colRank{ width: 90px; position: relative; }
 .colTeam{ min-width: 260px; }
 .colNum{ width: 70px; text-align:center; }
 .colForm{ width: 140px; }
@@ -192,10 +192,17 @@ td.num, th.colNum { text-align:center; }
 }
 .rankBand{
   width: 4px;
-  height: 34px;
+  /* stretch the full row height like the reference UI */
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  height: auto;
   border-radius: 6px;
   background: transparent;
+  pointer-events: none;
 }
+.rankCell{ padding-left: 8px; }
 .rankText{ width: 46px; text-align:center; color: var(--txt); }
 .rankArrow{
   width: 22px;
