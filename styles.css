@@ -436,3 +436,64 @@ table tbody tr{ position: relative; }
 td.colRank{ position: relative; padding-top: 0; padding-bottom: 0; }
 .rankCell{ height: 100%; align-items: stretch; }
 .rankBand{ top: 0; bottom: 0; height: 100%; }
+
+/* ===== v8 fixes: rank color band full height + compact standings ===== */
+
+/* Make each standings row a consistent height and more compact (closer to reference) */
+.standingsTable tbody tr{
+  height: 64px; /* compact row height */
+}
+.standingsTable th,
+.standingsTable td{
+  padding-top: 10px;
+  padding-bottom: 10px;
+  font-size: 14px;
+}
+
+/* Team pill more compact */
+.teamPill{
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 16px;
+}
+.teamPill .teamName{
+  font-size: 14px;
+}
+
+/* Rank cell: remove extra vertical padding so the band can touch row borders */
+td.colRank{
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  position: relative;
+}
+
+/* The wrapper must stretch full height */
+.rankCell{
+  position: relative;
+  height: 100%;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* The band fills full row height */
+.rankBand{
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 3px;
+}
+
+/* Add a little left padding so content doesn't overlap the band */
+.rankCellContent{
+  margin-left: 10px;
+}
+
+/* If there is an inner small bar element, force it to stretch too */
+.rankBand,
+.rankBandInner{
+  height: 100% !important;
+}
