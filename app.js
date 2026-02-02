@@ -1,4 +1,4 @@
-// APP_VERSION: season-add-fix-v1
+// APP_VERSION: buttonfix-season-switcher-v1
 /* League UI - vanilla JS, localStorage persistence
    Features: multi-league, seasons, divisions, teams editable (name/logo/comment),
    standings with colors, schedule generation, results entry, club list & detail,
@@ -335,13 +335,6 @@
       };
       divSwitchEl.appendChild(btn);
     }
-
-    // Season switch button (placed next to Div buttons)
-    const sBtn = document.createElement('button');
-    sBtn.className = 'divBtn seasonBtn';
-    sBtn.textContent = season.name || 'Season';
-    sBtn.onclick = () => openLeagueSeasonSwitcher();
-    divSwitchEl.appendChild(sBtn);
   }
 
   function renderStandings(){
@@ -450,37 +443,7 @@
 
     // Update lastRankMap AFTER drawing
     div.lastRankMap = nextRankMap;
-
-    // Rank color legend (順位カラー凡例)
-    renderRankLegend(div);
-
     saveDB();
-  }
-
-  function renderRankLegend(div){
-    const el = $('rankLegend');
-    if(!el) return;
-    const rules = (div.rankColors || [])
-      .filter(r=>r && (r.name||'').trim() && (r.color||'').trim())
-      .slice()
-      .sort((a,b)=>(a.start||0)-(b.start||0));
-
-    if(!rules.length){
-      el.innerHTML = '';
-      return;
-    }
-
-    el.innerHTML = rules.map(r=>{
-      const name = escapeHtml((r.name||'').trim());
-      const color = escapeHtml((r.color||'#ffffff').trim());
-      const start = Number(r.start || 1);
-      const end = Number(r.end || start);
-      return `<div class="rankLegendItem">`+
-             `<span class="rankLegendSwatch" style="background:${color}"></span>`+
-             `<span class="rankLegendText">ー${name}</span>`+
-             `<span class="rankLegendNote">(${start}〜${end})</span>`+
-             `</div>`;
-    }).join('');
   }
 
   function maxRound(div){
@@ -648,6 +611,16 @@
     root.appendChild(leagueButtons);
 
     root.appendChild(hr());
+
+    // Season
+    root.appendChild(sectionTitle('シーズン'));
+    const seasonRow = document.createElement('div');
+    seasonRow.className='btnRow';
+    seasonRow.appendChild(btn('＋新シーズン', ()=> { createNextSeason(); toast('新シーズンを作成しました'); closeModal(); render(); }));
+    seasonRow.appendChild(btn('シーズン削除', ()=> confirmDelete('このシーズンを削除しますか？', ()=>{
+      deleteSeason(season.id); closeModal(); render();
+    }), 'danger'));
+    root.appendChild(seasonRow);
 
     root.appendChild(hr());
 
@@ -1126,16 +1099,15 @@ root.appendChild(box);
   }
 
   // --- Season operations
-  function createNextSeason(nameOverride){
+  function createNextSeason(){
     const league = getLeague();
     const current = getSeason();
     // number suffix
     const m = (current.name||'').match(/(\d+)/);
     const nextN = m ? (parseInt(m[1],10)+1) : (league.seasons.length+1);
-    const desiredName = (nameOverride && String(nameOverride).trim()) ? String(nameOverride).trim() : null;
     const newSeason = {
       id: nowId(),
-      name: desiredName || `Season ${nextN}`,
+      name: `Season ${nextN}`,
       createdAt: Date.now(),
       endedAt: null,
       divisions: JSON.parse(JSON.stringify(current.divisions)).map(d=>{
@@ -1155,171 +1127,6 @@ root.appendChild(box);
     db.selected.round = 1;
     saveDB();
   }
-
-  // シーズン追加（リーグは増やさない）
-  function addSeasonFlow(){
-    const league = getLeague();
-    if(!league) return;
-    const current = getSeason();
-    const nextIndex = (league.seasons?.length || 0) + 1;
-
-    // Build modal UI: season name + team inheritance selection per division
-    const root = document.createElement('div');
-    root.className = 'modalBody';
-
-    const nameRow = document.createElement('div');
-    nameRow.className = 'row';
-    nameRow.innerHTML = `
-      <div class="field">
-        <div class="label">シーズン名</div>
-        <input id="newSeasonName" class="input" placeholder="Season ${nextIndex}" value="Season ${nextIndex}" />
-        <div class="hint">次シーズンに移った時も前のシーズンへ戻って確認できます。</div>
-      </div>
-    `;
-    root.appendChild(nameRow);
-
-    const inheritTitle = document.createElement('div');
-    inheritTitle.className = 'subTitle';
-    inheritTitle.textContent = 'チーム編成（前シーズンから選択して引き継ぎ）';
-    root.appendChild(inheritTitle);
-
-    const inheritWrap = document.createElement('div');
-    inheritWrap.className = 'inheritWrap';
-
-    for(const div of (current.divisions || [])){
-      const box = document.createElement('div');
-      box.className = 'inheritBox';
-      const divName = escapeHtml(div.name || 'Div');
-      const teams = div.teams || [];
-
-      const teamList = teams.map(t=>{
-        const tid = String(t.id);
-        const label = escapeHtml(t.name || 'Team');
-        return `
-          <label class="inheritItem">
-            <input type="checkbox" data-div="${escapeAttr(div.id)}" data-team="${escapeAttr(tid)}" checked />
-            <span class="inheritText">${label}</span>
-          </label>
-        `;
-      }).join('');
-
-      box.innerHTML = `
-        <div class="inheritHead">
-          <div class="inheritName">${divName}</div>
-          <div class="inheritActions">
-            <button class="miniBtn" data-action="all" data-div="${escapeAttr(div.id)}">全選択</button>
-            <button class="miniBtn" data-action="none" data-div="${escapeAttr(div.id)}">クリア</button>
-          </div>
-        </div>
-        <div class="inheritList">${teamList || '<div class="muted">チームがありません（管理 → チーム追加で作成できます）</div>'}</div>
-      `;
-      inheritWrap.appendChild(box);
-    }
-    root.appendChild(inheritWrap);
-
-    // Wire up mini actions
-    root.addEventListener('click', (e)=>{
-      const btn = e.target.closest('button.miniBtn');
-      if(!btn) return;
-      const divId = btn.getAttribute('data-div');
-      const act = btn.getAttribute('data-action');
-      root.querySelectorAll('input[type=checkbox][data-div]').forEach(cb=>{
-        if(cb.getAttribute('data-div') !== divId) return;
-        cb.checked = (act === 'all');
-      });
-    });
-
-    const footer = createModalFooter([
-      {text:'閉じる', onClick: closeModal},
-      {text:'作成', primary:true, onClick: ()=>{
-        const nameInput = root.querySelector('#newSeasonName');
-        const seasonName = (nameInput?.value || '').trim() || `Season ${nextIndex}`;
-
-        // collect selection
-        const selected = {};
-        root.querySelectorAll('input[type=checkbox][data-div][data-team]').forEach(cb=>{
-          const d = cb.getAttribute('data-div');
-          const t = cb.getAttribute('data-team');
-          if(!selected[d]) selected[d] = [];
-          if(cb.checked) selected[d].push(t);
-        });
-
-        // build next season (copy divisions, keep club ids, reset matches)
-        const newSeason = {
-          id: nowId(),
-          name: seasonName,
-          createdAt: Date.now(),
-          endedAt: null,
-          divisions: (current.divisions || []).map(div=>{
-            const keepIds = new Set(selected[div.id] || []);
-            const keptTeams = (div.teams || []).filter(t=>keepIds.has(String(t.id)))
-              .map(t=>({
-                id: t.id,
-                name: t.name,
-                logoDataUrl: t.logoDataUrl || '',
-                comment: t.comment || ''
-              }));
-            return {
-              id: nowId(),
-              name: div.name,
-              emblemDataUrl: div.emblemDataUrl || '',
-              teams: keptTeams,
-              matches: [],
-              roundCount: div.roundCount || 0,
-              rankColors: JSON.parse(JSON.stringify(div.rankColors || [])),
-              lastRankMap: {}
-            };
-          }),
-          history: current.history || {}
-        };
-
-        league.seasons.push(newSeason);
-        db.selected.seasonId = newSeason.id;
-        db.selected.divisionId = newSeason.divisions[0]?.id || newSeason.id;
-        db.selected.round = 1;
-        saveDB();
-        closeModal();
-        renderAll();
-        toast('シーズンを追加しました');
-      }}
-    ]);
-    openModal('新シーズン作成', root, footer);
-  }
-
-  // Quick add season from the League/Season switcher (prompt style)
-  function addSeasonQuick(leagueId){
-    const prevLeagueId = db.selected.leagueId;
-    if(leagueId) db.selected.leagueId = leagueId;
-    const league = getLeague();
-    if(!league){ db.selected.leagueId = prevLeagueId; return; }
-
-    const current = getSeason() || league.seasons[league.seasons.length-1];
-    const defaultName = `Season ${league.seasons.length+1}`;
-    const name = prompt('シーズン名を入力してください', defaultName);
-    if(!name){ db.selected.leagueId = prevLeagueId; saveDB(); return; }
-
-    // inherit divisions + teams by default to keep history continuity
-    const base = current || { divisions: [] };
-    const clonedDivs = JSON.parse(JSON.stringify(base.divisions||[]));
-    // keep same team IDs and keep global team registry as-is
-    const newSeason = {
-      id: nowId(),
-      name: name.trim() || defaultName,
-      createdAt: Date.now(),
-      endedAt: null,
-      divisions: clonedDivs,
-      scheduleByDiv: {}, // will be generated when needed
-      resultsByDiv: {},
-    };
-
-    league.seasons.push(newSeason);
-    db.selected.seasonId = newSeason.id;
-
-    saveDB();
-    renderAll();
-    toast('シーズンを追加しました');
-  }
-
 
   function endSeason(){ endSeasonWithMatches(); }
 
@@ -1617,38 +1424,6 @@ function openLeagueSeasonSwitcher(){
   const root = document.createElement('div');
   root.appendChild(sectionTitle('リーグ / シーズン切り替え'));
 
-  // 新シーズンを作る：現在のシーズン構成（Div/チーム）を複製して追加
-  // ※チームIDは維持（クラブ履歴を跨いで紐づけるため）
-  function createSeasonFromCurrent(newName){
-    const league = getLeague();
-    const current = getSeason();
-    const baseName = (newName||'').trim() || `Season ${league.seasons.length + 1}`;
-
-    // Deep-ish clone divisions + teams (keep ids)
-    const divisions = (current?.divisions || []).map(d => ({
-      ...d,
-      emblem: d.emblem || null,
-      teams: (d.teams||[]).map(t => ({ ...t }))
-    }));
-
-    const season = {
-      id: uid(),
-      name: baseName,
-      createdAt: Date.now(),
-      divisions,
-      rankColors: JSON.parse(JSON.stringify(current?.rankColors || DEFAULTS.rankColors)),
-      schedule: [],
-      results: [],
-      history: []
-    };
-
-    league.seasons.push(season);
-    db.selected.seasonId = season.id;
-    db.selected.divisionId = season.divisions[0]?.id || null;
-    saveDB();
-    renderAll();
-  }
-
   const leaguesWrap = document.createElement('div');
   leaguesWrap.className = 'btnRow';
   leaguesWrap.style.flexDirection = 'column';
@@ -1727,52 +1502,6 @@ function openLeagueSeasonSwitcher(){
         line.appendChild(pickS);
         seasonsBox.appendChild(line);
       });
-
-      // --- シーズン追加 / 削除（この画面で実行） ---
-      const actions = document.createElement('div');
-      actions.className = 'btnRow';
-      actions.style.justifyContent = 'flex-end';
-      actions.style.gap = '10px';
-      actions.style.marginTop = '8px';
-
-      const addBtn = btn('＋ シーズンを追加する', ()=>{
-        const defaultName = `Season ${l.seasons.length+1}`;
-        const name = prompt('シーズン名を入力してください', defaultName);
-        if(name===null) return;
-        const created = createSeasonFromCurrent(name);
-        if(!created) return;
-        // 追加したシーズンを選択して開く
-        db.selected.seasonId = created.id;
-        db.selected.divisionId = created.divisions[0]?.id || '';
-        db.selected.round = 1;
-        saveDB();
-        closeModal();
-        render();
-        // もう一回開いて一覧を更新したい場合はユーザーが切り替えボタンで開ける
-      });
-
-      const delBtn = btn('このシーズンを削除', ()=>{
-        if(l.seasons.length<=1){
-          alert('最後の1シーズンは削除できません');
-          return;
-        }
-        const curS = l.seasons.find(x=>x.id===db.selected.seasonId) || l.seasons[0];
-        if(!curS) return;
-        const ok = confirm(`「${curS.name}」を削除しますか？\n（戦績・日程・結果も削除されます）`);
-        if(!ok) return;
-        l.seasons = l.seasons.filter(x=>x.id!==curS.id);
-        db.selected.seasonId = l.seasons[l.seasons.length-1]?.id || l.seasons[0]?.id;
-        const next = l.seasons.find(x=>x.id===db.selected.seasonId) || l.seasons[0];
-        db.selected.divisionId = next?.divisions[0]?.id || '';
-        db.selected.round = 1;
-        saveDB();
-        closeModal();
-        render();
-      });
-
-      actions.appendChild(addBtn);
-      actions.appendChild(delBtn);
-      seasonsBox.appendChild(actions);
 
       leaguesWrap.appendChild(seasonsBox);
     }
@@ -1869,10 +1598,9 @@ function openSeasonMatchesModal(teamId, payload){
   });
 
   byId('btnNewSeason').addEventListener('click', ()=>{
-    openLeagueSeasonSwitcher();
-  });
-
-  render();
+    createNextSeason();
+    toast('新シーズンに移行しました');
+    render();
   });
 
   byId('btnEndSeason').addEventListener('click', ()=>{
