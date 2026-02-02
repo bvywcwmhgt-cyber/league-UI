@@ -1626,8 +1626,8 @@ function openSeasonMatchesModal(teamId, payload){
   // Tap league/season (top bar) to switch
   byId('leagueLogoWrap').addEventListener('click', openLeagueSeasonSwitcher);
   byId('leagueName').addEventListener('click', openLeagueSeasonSwitcher);
-  byId('seasonName').addEventListener('click', openLeagueSeasonSwitcher);
-  byId('seasonName').addEventListener('dblclick', renameSeason);
+  byId('seasonName').addEventListener('click', ()=>{ renameSeason(); });
+  byId('seasonName').addEventListener('contextmenu', (e)=>{ e.preventDefault(); renameSeason(); });
 
 // --- Render
   function render(){

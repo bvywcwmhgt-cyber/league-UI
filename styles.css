@@ -430,3 +430,9 @@ hr.sep{
 td.colRank{ position: relative; }
 
 .rankResult{ font-size: 11px; color: rgba(255,255,255,.55); margin-left: 2px; max-width: 160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* Ensure rank band fills full row height */
+table tbody tr{ position: relative; }
+td.colRank{ position: relative; padding-top: 0; padding-bottom: 0; }
+.rankCell{ height: 100%; align-items: stretch; }
+.rankBand{ top: 0; bottom: 0; height: 100%; }
