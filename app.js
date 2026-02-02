@@ -325,18 +325,7 @@
     for(const div of season.divisions){
       const btn = document.createElement('button');
       btn.className = 'divBtn' + (div.id===divId ? ' active':'');
-      // Division emblem + name
-      if(div.logoDataUrl){
-        const img = document.createElement('img');
-        img.className = 'divBtnIcon';
-        img.src = div.logoDataUrl;
-        img.alt = '';
-        btn.appendChild(img);
-      }
-      const span = document.createElement('span');
-      span.className = 'divBtnText';
-      span.textContent = div.name;
-      btn.appendChild(span);
+      btn.textContent = div.name;
       btn.onclick = () => {
         db.selected.divisionId = div.id;
         db.selected.round = 1;
@@ -379,8 +368,7 @@
       rankText.className = 'rankText';
       rankText.textContent = String(row.rank);
 
-      // Put the band directly under the TD so it can span the full row height
-      tdRank.appendChild(band);
+      wrap.appendChild(band);
       wrap.appendChild(rankText);
       wrap.appendChild(arrowEl);
 
@@ -450,28 +438,6 @@
       tr.appendChild(tdForm);
 
       standingsBody.appendChild(tr);
-    }
-
-    // Rank color legend (below standings table)
-    const legendEl = $('#rankLegend');
-    if(legendEl){
-      const rules = (db.ui.rankColors || [])
-        .filter(r=>r && String(r.name||'').trim());
-      if(rules.length===0){
-        legendEl.innerHTML = '';
-      } else {
-        const items = rules.map(r=>{
-          const color = r.color || '#ffffff';
-          const name = String(r.name).trim();
-          return `
-            <div class="legendItem">
-              <span class="legendSwatch" style="background:${escapeHtml(color)}"></span>
-              <span class="legendText">${escapeHtml(name)}</span>
-            </div>
-          `;
-        }).join('');
-        legendEl.innerHTML = `<div class="legendRow">${items}</div>`;
-      }
     }
 
     // Update lastRankMap AFTER drawing
@@ -649,7 +615,7 @@
     root.appendChild(sectionTitle('シーズン'));
     const seasonRow = document.createElement('div');
     seasonRow.className='btnRow';
-    seasonRow.appendChild(btn('＋新シーズン', ()=> { closeModal(); openNewSeasonWizard(); }));
+    seasonRow.appendChild(btn('＋新シーズン', ()=> { addSeasonFlow(); closeModal(); render(); }));
     seasonRow.appendChild(btn('シーズン削除', ()=> confirmDelete('このシーズンを削除しますか？', ()=>{
       deleteSeason(season.id); closeModal(); render();
     }), 'danger'));
@@ -1132,59 +1098,27 @@ root.appendChild(box);
   }
 
   // --- Season operations
-  function createNextSeason(opts = {}){
-    const autoMove = !!opts.autoMove;
+  function createNextSeason(nameOverride){
     const league = getLeague();
     const current = getSeason();
     // number suffix
     const m = (current.name||'').match(/(\d+)/);
     const nextN = m ? (parseInt(m[1],10)+1) : (league.seasons.length+1);
-    // Build next divisions (new IDs) and optionally apply auto promotion/relegation
-    const srcDivs = JSON.parse(JSON.stringify(current.divisions));
-    const baseDivs = srcDivs.map(d=>{
-      d.id = nowId();
-      d.matches = [];
-      d.lastRankMap = {};
-      return d;
-    });
-
-    if(autoMove && baseDivs.length>1){
-      // Distribute teams to divisions based on current standings and rankColor names.
-      // If a rank color rule name includes "昇格" -> move up one division.
-      // If includes "降格" -> move down one division.
-      const buckets = baseDivs.map(()=>[]);
-
-      for(let i=0;i<srcDivs.length;i++){
-        const div = srcDivs[i];
-        // Use the same calculation as standings
-        const rows = calcStandings(div);
-        const rankByTeam = new Map(rows.map(r=>[r.teamId, r.rank]));
-        const rules = (db.ui.rankColors||[]).filter(r=>r && r.startRank!=null && r.endRank!=null && String(r.name||'').trim());
-
-        for(const team of div.teams || []){
-          const rank = rankByTeam.get(team.id) || null;
-          let target = i;
-          if(rank!=null){
-            const rule = rules.find(rc=>rank>=Number(rc.startRank) && rank<=Number(rc.endRank));
-            const name = (rule?.name || '').toString();
-            if(name.includes('昇格')) target = i-1;
-            if(name.includes('降格')) target = i+1;
-          }
-          if(target<0) target=0;
-          if(target>buckets.length-1) target=buckets.length-1;
-          buckets[target].push(team);
-        }
-      }
-
-      for(let i=0;i<baseDivs.length;i++) baseDivs[i].teams = buckets[i];
-    }
-
+    const desiredName = (nameOverride && String(nameOverride).trim()) ? String(nameOverride).trim() : null;
     const newSeason = {
       id: nowId(),
-      name: `Season ${nextN}`,
+      name: desiredName || `Season ${nextN}`,
       createdAt: Date.now(),
       endedAt: null,
-      divisions: baseDivs,
+      divisions: JSON.parse(JSON.stringify(current.divisions)).map(d=>{
+        // reset matches and lastRankMap, keep teams and logos
+        d.id = nowId();
+        d.matches = [];
+        d.lastRankMap = {};
+        // team ids must persist across seasons for history? user wants same club history.
+        // We'll keep team ids same to track club across seasons, but divisions are new.
+        return d;
+      }),
       history: current.history || {}
     };
     league.seasons.push(newSeason);
@@ -1194,36 +1128,17 @@ root.appendChild(box);
     saveDB();
   }
 
-  function openNewSeasonWizard(){
-    const root = document.createElement('div');
-    root.innerHTML = `
-      <h3>新シーズン作成</h3>
-      <p class="muted" style="margin-top:8px">
-        次のシーズンを作ります。必要なら「順位カラー」に設定した<span class="badge">昇格/降格</span>を使って自動で振り分けできます。
-      </p>
-      <p class="muted" style="margin-top:6px">
-        ※ 自動振り分けは「名称」に <b>昇格</b> / <b>降格</b> を含むルールが対象です。（入れ替え戦はそのまま）
-      </p>
-      <div class="row" style="justify-content:flex-end;gap:10px;margin-top:14px">
-        <button class="btn" id="nsCancel">キャンセル</button>
-        <button class="btn" id="nsPlain">そのまま作成</button>
-        <button class="btn primary" id="nsAuto">順位カラーで自動昇降格</button>
-      </div>
-    `;
-    openModal(root);
-    $('#nsCancel')?.addEventListener('click', closeModal);
-    $('#nsPlain')?.addEventListener('click', ()=>{
-      createNextSeason({autoMove:false});
-      closeModal();
-      toast('新シーズンを作成しました');
-      render();
-    });
-    $('#nsAuto')?.addEventListener('click', ()=>{
-      createNextSeason({autoMove:true});
-      closeModal();
-      toast('新シーズンを作成しました（自動昇降格）');
-      render();
-    });
+  // シーズン追加（リーグは増やさない）
+  function addSeasonFlow(){
+    const league = getLeague();
+    if(!league) return;
+    const nextIndex = (league.seasons?.length || 0) + 1;
+    const name = prompt('追加するシーズン名', `Season ${nextIndex}`);
+    if(name == null) return;
+
+    createNextSeason(String(name).trim());
+    renderAll();
+    toast('シーズンを追加しました');
   }
 
   function endSeason(){ endSeasonWithMatches(); }
@@ -1696,7 +1611,9 @@ function openSeasonMatchesModal(teamId, payload){
   });
 
   byId('btnNewSeason').addEventListener('click', ()=>{
-    openNewSeasonWizard();
+    addSeasonFlow();
+    toast('新シーズンを追加しました');
+    render();
   });
 
   byId('btnEndSeason').addEventListener('click', ()=>{

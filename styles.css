@@ -145,17 +145,6 @@ body{
   color: var(--txt);
   cursor:pointer;
   font-size: 13px;
-  display:flex;
-  align-items:center;
-  gap: 8px;
-}
-.divIcon{
-  width: 18px;
-  height: 18px;
-  border-radius: 6px;
-  object-fit: cover;
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.14) inset;
-  flex: 0 0 auto;
 }
 .divBtn.active{ background: rgba(255,255,255,.10); }
 
@@ -189,7 +178,7 @@ tbody td{
   white-space:nowrap;
 }
 
-.colRank{ width: 90px; position: relative; padding: 0 !important; }
+.colRank{ width: 90px; position: relative; }
 .colTeam{ min-width: 260px; }
 .colNum{ width: 70px; text-align:center; }
 .colForm{ width: 140px; }
@@ -201,7 +190,7 @@ td.num, th.colNum { text-align:center; }
   display:flex;
   align-items:center;
   gap: 10px;
-  padding: 12px 10px 12px 10px;
+  padding-left: 10px;
 }
 
 .rankBand{
@@ -214,7 +203,7 @@ td.num, th.colNum { text-align:center; }
   background: transparent;
 }
 
-.rankCell{ padding: 12px 10px 12px 8px; }
+.rankCell{ padding-left: 8px; }
 .rankText{ width: 46px; text-align:center; color: var(--txt); }
 .rankArrow{
   width: 22px;
@@ -507,26 +496,4 @@ td.colRank{
 .rankBand,
 .rankBandInner{
   height: 100% !important;
-}
-
-/* Rank color legend */
-.rankLegend{
-  display:flex;
-  flex-wrap:wrap;
-  gap: 10px 14px;
-  margin-top: 12px;
-  padding: 0 8px 6px;
-}
-.legendItem{
-  display:flex;
-  align-items:center;
-  gap: 8px;
-  font-size: 12px;
-  color: rgba(255,255,255,0.78);
-}
-.legendSwatch{
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.08) inset;
 }
