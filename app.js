@@ -649,6 +649,8 @@
 
     root.appendChild(hr());
 
+    root.appendChild(hr());
+
     // Divisions list
     root.appendChild(sectionTitle('ディビジョン'));
     for(const div of season.divisions){
@@ -1284,6 +1286,41 @@ root.appendChild(box);
     openModal('新シーズン作成', root, footer);
   }
 
+  // Quick add season from the League/Season switcher (prompt style)
+  function addSeasonQuick(leagueId){
+    const prevLeagueId = db.selected.leagueId;
+    if(leagueId) db.selected.leagueId = leagueId;
+    const league = getLeague();
+    if(!league){ db.selected.leagueId = prevLeagueId; return; }
+
+    const current = getSeason() || league.seasons[league.seasons.length-1];
+    const defaultName = `Season ${league.seasons.length+1}`;
+    const name = prompt('シーズン名を入力してください', defaultName);
+    if(!name){ db.selected.leagueId = prevLeagueId; saveDB(); return; }
+
+    // inherit divisions + teams by default to keep history continuity
+    const base = current || { divisions: [] };
+    const clonedDivs = JSON.parse(JSON.stringify(base.divisions||[]));
+    // keep same team IDs and keep global team registry as-is
+    const newSeason = {
+      id: nowId(),
+      name: name.trim() || defaultName,
+      createdAt: Date.now(),
+      endedAt: null,
+      divisions: clonedDivs,
+      scheduleByDiv: {}, // will be generated when needed
+      resultsByDiv: {},
+    };
+
+    league.seasons.push(newSeason);
+    db.selected.seasonId = newSeason.id;
+
+    saveDB();
+    renderAll();
+    toast('シーズンを追加しました');
+  }
+
+
   function endSeason(){ endSeasonWithMatches(); }
 
   // --- CRUD
@@ -1580,6 +1617,38 @@ function openLeagueSeasonSwitcher(){
   const root = document.createElement('div');
   root.appendChild(sectionTitle('リーグ / シーズン切り替え'));
 
+  // 新シーズンを作る：現在のシーズン構成（Div/チーム）を複製して追加
+  // ※チームIDは維持（クラブ履歴を跨いで紐づけるため）
+  function createSeasonFromCurrent(newName){
+    const league = getLeague();
+    const current = getSeason();
+    const baseName = (newName||'').trim() || `Season ${league.seasons.length + 1}`;
+
+    // Deep-ish clone divisions + teams (keep ids)
+    const divisions = (current?.divisions || []).map(d => ({
+      ...d,
+      emblem: d.emblem || null,
+      teams: (d.teams||[]).map(t => ({ ...t }))
+    }));
+
+    const season = {
+      id: uid(),
+      name: baseName,
+      createdAt: Date.now(),
+      divisions,
+      rankColors: JSON.parse(JSON.stringify(current?.rankColors || DEFAULTS.rankColors)),
+      schedule: [],
+      results: [],
+      history: []
+    };
+
+    league.seasons.push(season);
+    db.selected.seasonId = season.id;
+    db.selected.divisionId = season.divisions[0]?.id || null;
+    saveDB();
+    renderAll();
+  }
+
   const leaguesWrap = document.createElement('div');
   leaguesWrap.className = 'btnRow';
   leaguesWrap.style.flexDirection = 'column';
@@ -1634,44 +1703,6 @@ function openLeagueSeasonSwitcher(){
       seasonsBox.style.flexDirection='column';
       seasonsBox.style.gap='6px';
 
-      // この画面からのみシーズン追加/削除を行う
-      const seasonTools = document.createElement('div');
-      seasonTools.className = 'btnRow';
-      seasonTools.style.justifyContent = 'flex-end';
-      seasonTools.style.gap = '10px';
-
-      const addSeasonBtn = btn('＋シーズン追加', ()=>{
-        // 既存の新シーズン作成UI(チーム引き継ぎ選択)を再利用
-        closeModal();
-        openNewSeasonCreator();
-      });
-
-      const delSeasonBtn = btn('シーズン削除', ()=>{
-        const seasons = l.seasons || [];
-        if(seasons.length<=1){
-          alert('シーズンは最低1つ必要です。');
-          return;
-        }
-        const cur = seasons.find(s=>s.id===db.selected.seasonId) || seasons[seasons.length-1];
-        if(!cur){ return; }
-        confirmDelete(`「${cur.name}」を削除しますか？`, ()=>{
-          deleteSeason(cur.id);
-          // 削除後の選択を調整
-          const leagueNow = getSelectedLeague();
-          const nextSeason = leagueNow?.seasons?.[leagueNow.seasons.length-1] || leagueNow?.seasons?.[0];
-          db.selected.seasonId = nextSeason?.id || '';
-          db.selected.divisionId = nextSeason?.divisions?.[0]?.id || '';
-          db.selected.round = 1;
-          saveDB();
-          closeModal();
-          render();
-        });
-      });
-
-      seasonTools.appendChild(addSeasonBtn);
-      seasonTools.appendChild(delSeasonBtn);
-      seasonsBox.appendChild(seasonTools);
-
       l.seasons.slice().reverse().forEach((s)=>{
         const line = document.createElement('div');
         line.className='btnRow';
@@ -1680,23 +1711,8 @@ function openLeagueSeasonSwitcher(){
 
         const t = document.createElement('div');
         t.className='smallHint';
-        t.style.cursor='pointer';
         const ended = s.endedAt ? '（終了）' : '';
         t.textContent = `${s.name}${ended}`;
-        // 名前変更（この画面から）
-        t.addEventListener('click', ()=>{
-          const next = prompt('シーズン名を変更', s.name || '');
-          if(next===null) return;
-          const v = (next||'').trim();
-          if(!v) return;
-          s.name = v;
-          saveDB();
-          openLeagueSeasonSwitcher();
-        });
-
-        const right = document.createElement('div');
-        right.className='btnRow';
-        right.style.gap='8px';
 
         const pickS = btn(s.id===db.selected.seasonId ? '選択中' : '開く', ()=>{
           db.selected.seasonId = s.id;
@@ -1707,29 +1723,56 @@ function openLeagueSeasonSwitcher(){
           render();
         });
 
-        const delS = btn('削除', ()=>{
-          const seasons = l.seasons || [];
-          if(seasons.length<=1){ alert('シーズンは最低1つ必要です。'); return; }
-          confirmDelete(`「${s.name}」を削除しますか？`, ()=>{
-            deleteSeason(s.id);
-            const leagueNow = getSelectedLeague();
-            const nextSeason = leagueNow?.seasons?.[leagueNow.seasons.length-1] || leagueNow?.seasons?.[0];
-            db.selected.seasonId = nextSeason?.id || '';
-            db.selected.divisionId = nextSeason?.divisions?.[0]?.id || '';
-            db.selected.round = 1;
-            saveDB();
-            closeModal();
-            render();
-          });
-        });
-
-        right.appendChild(pickS);
-        right.appendChild(delS);
-
         line.appendChild(t);
-        line.appendChild(right);
+        line.appendChild(pickS);
         seasonsBox.appendChild(line);
       });
+
+      // --- シーズン追加 / 削除（この画面で実行） ---
+      const actions = document.createElement('div');
+      actions.className = 'btnRow';
+      actions.style.justifyContent = 'flex-end';
+      actions.style.gap = '10px';
+      actions.style.marginTop = '8px';
+
+      const addBtn = btn('＋ シーズンを追加する', ()=>{
+        const defaultName = `Season ${l.seasons.length+1}`;
+        const name = prompt('シーズン名を入力してください', defaultName);
+        if(name===null) return;
+        const created = createSeasonFromCurrent(name);
+        if(!created) return;
+        // 追加したシーズンを選択して開く
+        db.selected.seasonId = created.id;
+        db.selected.divisionId = created.divisions[0]?.id || '';
+        db.selected.round = 1;
+        saveDB();
+        closeModal();
+        render();
+        // もう一回開いて一覧を更新したい場合はユーザーが切り替えボタンで開ける
+      });
+
+      const delBtn = btn('このシーズンを削除', ()=>{
+        if(l.seasons.length<=1){
+          alert('最後の1シーズンは削除できません');
+          return;
+        }
+        const curS = l.seasons.find(x=>x.id===db.selected.seasonId) || l.seasons[0];
+        if(!curS) return;
+        const ok = confirm(`「${curS.name}」を削除しますか？\n（戦績・日程・結果も削除されます）`);
+        if(!ok) return;
+        l.seasons = l.seasons.filter(x=>x.id!==curS.id);
+        db.selected.seasonId = l.seasons[l.seasons.length-1]?.id || l.seasons[0]?.id;
+        const next = l.seasons.find(x=>x.id===db.selected.seasonId) || l.seasons[0];
+        db.selected.divisionId = next?.divisions[0]?.id || '';
+        db.selected.round = 1;
+        saveDB();
+        closeModal();
+        render();
+      });
+
+      actions.appendChild(addBtn);
+      actions.appendChild(delBtn);
+      seasonsBox.appendChild(actions);
 
       leaguesWrap.appendChild(seasonsBox);
     }
@@ -1825,9 +1868,11 @@ function openSeasonMatchesModal(teamId, payload){
     setTab('schedule');
   });
 
-  // シーズンの追加/削除/切り替えは「切り替え」画面で行う
   byId('btnNewSeason').addEventListener('click', ()=>{
     openLeagueSeasonSwitcher();
+  });
+
+  render();
   });
 
   byId('btnEndSeason').addEventListener('click', ()=>{
