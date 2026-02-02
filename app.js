@@ -205,7 +205,23 @@
     return { cls:'same', text:'→' };
   }
 
-  // --- Schedule generation (circle method)
+  
+  function getLastResultForTeam(div, teamId){
+    const matches = div.matches
+      .filter(m=> (m.homeId===teamId || m.awayId===teamId) && m.homeGoals!=null && m.awayGoals!=null)
+      .sort((a,b)=> (b.playedAt||0)-(a.playedAt||0) || (b.round||0)-(a.round||0));
+    const m = matches[0];
+    if(!m) return '';
+    const isHome = m.homeId===teamId;
+    const gf = isHome ? m.homeGoals : m.awayGoals;
+    const ga = isHome ? m.awayGoals : m.homeGoals;
+    const oppId = isHome ? m.awayId : m.homeId;
+    const opp = div.teams.find(t=>t.id===oppId);
+    const res = gf>ga ? 'W' : (gf<ga ? 'L' : 'D');
+    return `${res} ${gf}-${ga} vs ${opp?.name || '—'}`;
+  }
+
+// --- Schedule generation (circle method)
   function generateRoundRobin(teams, opts){
     // opts: { doubleRound:boolean, homeAway:boolean }
     const ids = teams.map(t=>t.id);
@@ -274,13 +290,11 @@
   const divSwitchEl = byId('divSwitch');
   const standingsBody = byId('standingsBody');
   const scheduleList = byId('scheduleList');
-  const resultsList = byId('resultsList');
-  const clubGrid = byId('clubGrid');
+    const clubGrid = byId('clubGrid');
 
   const viewStandings = byId('viewStandings');
   const viewSchedule = byId('viewSchedule');
-  const viewResults = byId('viewResults');
-  const viewClubs = byId('viewClubs');
+    const viewClubs = byId('viewClubs');
 
   const roundLabel = byId('roundLabel');
 
@@ -292,7 +306,6 @@
     }
     viewStandings.classList.toggle('hidden', tab!=='standings');
     viewSchedule.classList.toggle('hidden', tab!=='schedule');
-    viewResults.classList.toggle('hidden', tab!=='results');
     viewClubs.classList.toggle('hidden', tab!=='clubs');
     render();
   }
@@ -358,6 +371,11 @@
       wrap.appendChild(band);
       wrap.appendChild(rankText);
       wrap.appendChild(arrowEl);
+
+      const lastRes = document.createElement('div');
+      lastRes.className = 'rankResult';
+      lastRes.textContent = getLastResultForTeam(div, row.id);
+      wrap.appendChild(lastRes);
       tdRank.appendChild(wrap);
       tr.appendChild(tdRank);
 
@@ -452,23 +470,6 @@
       scheduleList.appendChild(matchRowEl(m, mapTeams, {editable:true}));
     }
   }
-
-  function renderResults(){
-    const div = getDivision();
-    resultsList.innerHTML = '';
-    const mapTeams = new Map(div.teams.map(t=>[t.id,t]));
-    const played = div.matches.filter(m=>m.homeGoals!=null && m.awayGoals!=null)
-      .sort((a,b)=> (b.playedAt||0)-(a.playedAt||0) || b.round-a.round);
-    const latest = played.slice(0, 8);
-    if(latest.length===0){
-      resultsList.innerHTML = `<div class="smallHint" style="padding:6px 2px;">結果がまだありません。日程からスコアを入力してください。</div>`;
-      return;
-    }
-    for(const m of latest){
-      resultsList.appendChild(matchRowEl(m, mapTeams, {editable:true, showRound:true}));
-    }
-  }
-
   function renderClubs(){
     const div = getDivision();
     clubGrid.innerHTML = '';
@@ -1307,25 +1308,44 @@ root.appendChild(box);
     f.className='field';
     const l = document.createElement('label');
     l.textContent = labelText;
+
     const wrap = document.createElement('div');
-    wrap.className = 'colorPickerWrap';
+    wrap.className = 'btnRow';
+    wrap.style.alignItems = 'center';
 
     const input = document.createElement('input');
     input.type='color';
-    // Ensure valid hex for <input type="color">
-    const safe = (typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)) ? value : '#ffffff';
-    input.value = safe;
-    input.oninput = ()=> onChange(input.value);
+    input.value = value || '#ffffff';
+    input.style.width='56px';
+    input.style.height='40px';
+    input.style.padding='0';
+    input.style.borderRadius='12px';
+    input.style.border='1px solid rgba(255,255,255,.14)';
+    input.style.background='transparent';
 
-    const hex = document.createElement('div');
-    hex.className='smallHint';
-    hex.textContent = safe.toUpperCase();
-    input.addEventListener('input', ()=> { hex.textContent = input.value.toUpperCase(); });
+    const code = document.createElement('input');
+    code.type='text';
+    code.value = (value || '#ffffff').toUpperCase();
+    code.placeholder = '#RRGGBB';
+    code.style.flex='1';
+
+    function sync(v){
+      onChange(v);
+      code.value = String(v).toUpperCase();
+      input.value = v;
+    }
+
+    input.oninput = ()=> sync(input.value);
+    code.oninput = ()=>{
+      const v = code.value.trim();
+      if(/^#([0-9a-fA-F]{6})$/.test(v)) sync(v);
+    };
 
     wrap.appendChild(input);
-    wrap.appendChild(hex);
+    wrap.appendChild(code);
 
-    f.appendChild(l); f.appendChild(wrap);
+    f.appendChild(l); 
+    f.appendChild(wrap);
     return f;
   }
 
@@ -1562,26 +1582,7 @@ function openSeasonMatchesModal(teamId, payload){
     render();
   });
 
-  byId('btnAllResults').addEventListener('click', ()=>{
-    const div = getDivision();
-    const root = document.createElement('div');
-    root.appendChild(sectionTitle('全結果'));
-    const mapTeams = new Map(div.teams.map(t=>[t.id,t]));
-    const all = div.matches.filter(m=>m.homeGoals!=null&&m.awayGoals!=null)
-      .sort((a,b)=> (b.playedAt||0)-(a.playedAt||0) || b.round-a.round);
-    const box = document.createElement('div');
-    box.className='list';
-    box.style.padding='0';
-    if(all.length===0){
-      box.innerHTML = `<div class="smallHint" style="padding:6px 2px;">結果がありません</div>`;
-    }else{
-      all.forEach(m=> box.appendChild(matchRowEl(m, mapTeams, {editable:true, showRound:true})));
-    }
-    root.appendChild(box);
-    openModal('全結果', root, footerButtons([{text:'閉じる', onClick: closeModal}]));
-  });
-
-  byId('btnGenSchedule').addEventListener('click', ()=>{
+    byId('btnGenSchedule').addEventListener('click', ()=>{
     const div = getDivision();
     if(div.teams.length < 2){ toast('チームが足りません'); return; }
     // simple confirm prompts
@@ -1645,14 +1646,12 @@ function openSeasonMatchesModal(teamId, payload){
     }
     viewStandings.classList.toggle('hidden', tab!=='standings');
     viewSchedule.classList.toggle('hidden', tab!=='schedule');
-    viewResults.classList.toggle('hidden', tab!=='results');
     viewClubs.classList.toggle('hidden', tab!=='clubs');
 
     renderTop();
     renderDivSwitch();
     if(tab==='standings') renderStandings();
     if(tab==='schedule') renderSchedule();
-    if(tab==='results') renderResults();
     if(tab==='clubs') renderClubs();
   };
 

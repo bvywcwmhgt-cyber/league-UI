@@ -428,3 +428,5 @@ hr.sep{
 
 /* Rank band full-height */
 td.colRank{ position: relative; }
+
+.rankResult{ font-size: 11px; color: rgba(255,255,255,.55); margin-left: 2px; max-width: 160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
