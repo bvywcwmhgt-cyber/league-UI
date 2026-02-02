@@ -649,18 +649,6 @@
 
     root.appendChild(hr());
 
-    // Season
-    root.appendChild(sectionTitle('シーズン'));
-    const seasonRow = document.createElement('div');
-    seasonRow.className='btnRow';
-    seasonRow.appendChild(btn('＋新シーズン', ()=> { addSeasonFlow(); closeModal(); render(); }));
-    seasonRow.appendChild(btn('シーズン削除', ()=> confirmDelete('このシーズンを削除しますか？', ()=>{
-      deleteSeason(season.id); closeModal(); render();
-    }), 'danger'));
-    root.appendChild(seasonRow);
-
-    root.appendChild(hr());
-
     // Divisions list
     root.appendChild(sectionTitle('ディビジョン'));
     for(const div of season.divisions){
@@ -1646,6 +1634,44 @@ function openLeagueSeasonSwitcher(){
       seasonsBox.style.flexDirection='column';
       seasonsBox.style.gap='6px';
 
+      // この画面からのみシーズン追加/削除を行う
+      const seasonTools = document.createElement('div');
+      seasonTools.className = 'btnRow';
+      seasonTools.style.justifyContent = 'flex-end';
+      seasonTools.style.gap = '10px';
+
+      const addSeasonBtn = btn('＋シーズン追加', ()=>{
+        // 既存の新シーズン作成UI(チーム引き継ぎ選択)を再利用
+        closeModal();
+        openNewSeasonCreator();
+      });
+
+      const delSeasonBtn = btn('シーズン削除', ()=>{
+        const seasons = l.seasons || [];
+        if(seasons.length<=1){
+          alert('シーズンは最低1つ必要です。');
+          return;
+        }
+        const cur = seasons.find(s=>s.id===db.selected.seasonId) || seasons[seasons.length-1];
+        if(!cur){ return; }
+        confirmDelete(`「${cur.name}」を削除しますか？`, ()=>{
+          deleteSeason(cur.id);
+          // 削除後の選択を調整
+          const leagueNow = getSelectedLeague();
+          const nextSeason = leagueNow?.seasons?.[leagueNow.seasons.length-1] || leagueNow?.seasons?.[0];
+          db.selected.seasonId = nextSeason?.id || '';
+          db.selected.divisionId = nextSeason?.divisions?.[0]?.id || '';
+          db.selected.round = 1;
+          saveDB();
+          closeModal();
+          render();
+        });
+      });
+
+      seasonTools.appendChild(addSeasonBtn);
+      seasonTools.appendChild(delSeasonBtn);
+      seasonsBox.appendChild(seasonTools);
+
       l.seasons.slice().reverse().forEach((s)=>{
         const line = document.createElement('div');
         line.className='btnRow';
@@ -1654,8 +1680,23 @@ function openLeagueSeasonSwitcher(){
 
         const t = document.createElement('div');
         t.className='smallHint';
+        t.style.cursor='pointer';
         const ended = s.endedAt ? '（終了）' : '';
         t.textContent = `${s.name}${ended}`;
+        // 名前変更（この画面から）
+        t.addEventListener('click', ()=>{
+          const next = prompt('シーズン名を変更', s.name || '');
+          if(next===null) return;
+          const v = (next||'').trim();
+          if(!v) return;
+          s.name = v;
+          saveDB();
+          openLeagueSeasonSwitcher();
+        });
+
+        const right = document.createElement('div');
+        right.className='btnRow';
+        right.style.gap='8px';
 
         const pickS = btn(s.id===db.selected.seasonId ? '選択中' : '開く', ()=>{
           db.selected.seasonId = s.id;
@@ -1666,8 +1707,27 @@ function openLeagueSeasonSwitcher(){
           render();
         });
 
+        const delS = btn('削除', ()=>{
+          const seasons = l.seasons || [];
+          if(seasons.length<=1){ alert('シーズンは最低1つ必要です。'); return; }
+          confirmDelete(`「${s.name}」を削除しますか？`, ()=>{
+            deleteSeason(s.id);
+            const leagueNow = getSelectedLeague();
+            const nextSeason = leagueNow?.seasons?.[leagueNow.seasons.length-1] || leagueNow?.seasons?.[0];
+            db.selected.seasonId = nextSeason?.id || '';
+            db.selected.divisionId = nextSeason?.divisions?.[0]?.id || '';
+            db.selected.round = 1;
+            saveDB();
+            closeModal();
+            render();
+          });
+        });
+
+        right.appendChild(pickS);
+        right.appendChild(delS);
+
         line.appendChild(t);
-        line.appendChild(pickS);
+        line.appendChild(right);
         seasonsBox.appendChild(line);
       });
 
@@ -1765,10 +1825,9 @@ function openSeasonMatchesModal(teamId, payload){
     setTab('schedule');
   });
 
+  // シーズンの追加/削除/切り替えは「切り替え」画面で行う
   byId('btnNewSeason').addEventListener('click', ()=>{
-    addSeasonFlow();
-    toast('新シーズンを追加しました');
-    render();
+    openLeagueSeasonSwitcher();
   });
 
   byId('btnEndSeason').addEventListener('click', ()=>{
