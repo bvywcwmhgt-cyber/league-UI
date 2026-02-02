@@ -894,6 +894,7 @@
         const rec = s.rows.find(r=>r.teamId===teamId);
         if(rec){
           rows.push({
+            seasonId: s.seasonId,
             seasonName: s.seasonName,
             divName: d.name,
             rank: rec.rank,
@@ -911,6 +912,7 @@
     const liveRow = live.find(r=>r.id===teamId);
     if(liveRow){
       rows.push({
+        seasonId: season.id,
         seasonName: season.name,
         divName: div.name,
         rank: liveRow.rank,
@@ -925,11 +927,38 @@
     if(rows.length===0){
       const tr = document.createElement('tr');
       tr.innerHTML = `<td colspan="10" style="color:rgba(255,255,255,.6);padding:12px;">まだ戦績がありません</td>`;
-      tbody.appendChild(tr);
+      tr.onclick = () => {
+  const league = getLeague();
+  const currentSeason = getSeason();
+
+  // Current season: use live matches
+  if(r.seasonId === currentSeason.id){
+    openSeasonMatchesModal(teamId, { seasonName: currentSeason.name, divName: div.name, matches: div.matches, teams: div.teams });
+    return;
+  }
+
+  // Past seasons: find snapshot with matches
+  const ss = league.seasons.find(x=>x.id===r.seasonId);
+  if(ss){
+    for(const d of ss.divisions){
+      const snaps = (ss.history && ss.history[d.id]) || [];
+      const snap = snaps.find(sp=>sp.seasonId===r.seasonId);
+      if(snap && Array.isArray(snap.matches)){
+        openSeasonMatchesModal(teamId, { seasonName: snap.seasonName, divName: d.name, matches: snap.matches, teams: d.teams });
+        return;
+      }
+    }
+  }
+  toast('このシーズンの試合データが見つかりません（シーズン終了で保存されます）');
+};
+tbody.appendChild(tr);
+
     }else{
       // sort by season name fallback created order (we keep as-is)
       for(const r of rows){
         const tr = document.createElement('tr');
+        tr.style.cursor='pointer';
+        tr.title='タップでそのシーズンの全節スコア';
         tr.innerHTML = `
           <td>${escapeHtml(r.seasonName)}</td>
           <td>${escapeHtml(r.divName)}</td>
@@ -953,37 +982,20 @@
     root.appendChild(hr());
 
     // Upcoming + recent results for this club (current division)
-    root.appendChild(sectionTitle('今後の対戦 / 最近の結果'));
-    const mapTeams = new Map(div.teams.map(t=>[t.id,t]));
-    const all = div.matches.slice().sort((a,b)=> a.round-b.round);
+    root.appendChild(sectionTitle('対戦カード（第1節〜最終節）'));
+const mapTeams = new Map(div.teams.map(t=>[t.id,t]));
+const all = div.matches.slice().filter(m=> (m.homeId===teamId||m.awayId===teamId)).sort((a,b)=>a.round-b.round);
 
-    const next = all.filter(m=> (m.homeId===teamId||m.awayId===teamId) && (m.homeGoals==null||m.awayGoals==null)).slice(0,6);
-    const recent = all.filter(m=> (m.homeId===teamId||m.awayId===teamId) && (m.homeGoals!=null&&m.awayGoals!=null))
-      .sort((a,b)=> (b.playedAt||0)-(a.playedAt||0)).slice(0,6);
+const box = document.createElement('div');
+box.className='list';
+box.style.padding='0';
 
-    const box = document.createElement('div');
-    box.className='list';
-    box.style.padding='0';
-
-    if(next.length===0 && recent.length===0){
-      box.innerHTML = `<div class="smallHint" style="padding:6px 2px;">日程がありません。「日程生成」から作成してください。</div>`;
-    }else{
-      if(next.length){
-        const h = document.createElement('div');
-        h.className='smallHint'; h.style.padding='6px 2px';
-        h.textContent='今後';
-        box.appendChild(h);
-        next.forEach(m=> box.appendChild(matchRowEl(m, mapTeams, {editable:true, showRound:true})));
-      }
-      if(recent.length){
-        const h = document.createElement('div');
-        h.className='smallHint'; h.style.padding='10px 2px 6px';
-        h.textContent='最近の結果';
-        box.appendChild(h);
-        recent.forEach(m=> box.appendChild(matchRowEl(m, mapTeams, {editable:true, showRound:true})));
-      }
-    }
-    root.appendChild(box);
+if(all.length===0){
+  box.innerHTML = `<div class="smallHint" style="padding:6px 2px;">日程がありません。「日程生成」から作成してください。</div>`;
+}else{
+  all.forEach(m=> box.appendChild(matchRowEl(m, mapTeams, {editable:true, showRound:true})));
+}
+root.appendChild(box);
 
     const footer = footerButtons([
       {text:'閉じる', onClick: closeModal},
@@ -1114,30 +1126,7 @@
     saveDB();
   }
 
-  function endSeason(){
-    const league = getLeague();
-    const season = getSeason();
-    // snapshot each division standings
-    season.history = season.history || {};
-    for(const div of season.divisions){
-      const table = computeTable(div);
-      const rows = table.map(r=>({
-        teamId: r.id,
-        teamName: r.name,
-        rank: r.rank,
-        played: r.played,
-        w: r.w, d: r.d, l: r.l,
-        gf: r.gf, ga: r.ga, gd: r.gd,
-        pts: r.pts
-      }));
-      const snap = { seasonId: season.id, seasonName: season.name, savedAt: Date.now(), rows };
-      season.history[div.id] = season.history[div.id] || [];
-      season.history[div.id].push(snap);
-    }
-    season.endedAt = Date.now();
-    saveDB();
-    toast('シーズン戦績を保存しました');
-  }
+  function endSeason(){ endSeasonWithMatches(); }
 
   // --- CRUD
   function addLeague(){
@@ -1398,7 +1387,150 @@
     }[c]));
   }
 
-  // --- Buttons & events
+  
+// --- Switcher modals (League / Season)
+function openLeagueSeasonSwitcher(){
+  const root = document.createElement('div');
+  root.appendChild(sectionTitle('リーグ / シーズン切り替え'));
+
+  const leaguesWrap = document.createElement('div');
+  leaguesWrap.className = 'btnRow';
+  leaguesWrap.style.flexDirection = 'column';
+  leaguesWrap.style.alignItems = 'stretch';
+
+  const curLeagueId = db.selected.leagueId;
+
+  db.leagues.forEach((l)=>{
+    const row = document.createElement('div');
+    row.className='btnRow';
+    row.style.alignItems='center';
+    row.style.justifyContent='space-between';
+
+    const left = document.createElement('div');
+    left.style.display='flex';
+    left.style.alignItems='center';
+    left.style.gap='10px';
+
+    const b = document.createElement('div');
+    b.className='badge';
+    const img=document.createElement('img');
+    const fb=document.createElement('div'); fb.className='fallback'; fb.textContent='🏳️';
+    b.appendChild(img); b.appendChild(fb);
+    if(l.logoDataUrl){ img.src=l.logoDataUrl; img.style.display='block'; fb.style.display='none'; }
+
+    const name = document.createElement('div');
+    name.style.fontWeight='750';
+    name.textContent = l.name || 'League';
+
+    left.appendChild(b);
+    left.appendChild(name);
+
+    const pick = btn(l.id===curLeagueId ? '選択中' : '切替', ()=>{
+      db.selected.leagueId = l.id;
+      db.selected.seasonId = l.seasons[l.seasons.length-1]?.id || l.seasons[0]?.id;
+      const s = l.seasons.find(x=>x.id===db.selected.seasonId) || l.seasons[0];
+      db.selected.divisionId = s?.divisions[0]?.id || '';
+      db.selected.round = 1;
+      saveDB();
+      closeModal();
+      render();
+    });
+
+    row.appendChild(left);
+    row.appendChild(pick);
+    leaguesWrap.appendChild(row);
+
+    if(l.id===db.selected.leagueId){
+      const seasonsBox = document.createElement('div');
+      seasonsBox.style.margin = '6px 0 10px 54px';
+      seasonsBox.style.display='flex';
+      seasonsBox.style.flexDirection='column';
+      seasonsBox.style.gap='6px';
+
+      l.seasons.slice().reverse().forEach((s)=>{
+        const line = document.createElement('div');
+        line.className='btnRow';
+        line.style.justifyContent='space-between';
+        line.style.alignItems='center';
+
+        const t = document.createElement('div');
+        t.className='smallHint';
+        const ended = s.endedAt ? '（終了）' : '';
+        t.textContent = `${s.name}${ended}`;
+
+        const pickS = btn(s.id===db.selected.seasonId ? '選択中' : '開く', ()=>{
+          db.selected.seasonId = s.id;
+          db.selected.divisionId = s.divisions[0]?.id || '';
+          db.selected.round = 1;
+          saveDB();
+          closeModal();
+          render();
+        });
+
+        line.appendChild(t);
+        line.appendChild(pickS);
+        seasonsBox.appendChild(line);
+      });
+
+      leaguesWrap.appendChild(seasonsBox);
+    }
+  });
+
+  root.appendChild(leaguesWrap);
+  openModal('切り替え', root, footerButtons([{text:'閉じる', onClick: closeModal}]));
+}
+
+// --- Season end saves standings + full match list (so you can open old season results)
+function endSeasonWithMatches(){
+  const season = getSeason();
+  season.history = season.history || {};
+  for(const div of season.divisions){
+    const table = computeTable(div);
+    const rows = table.map(r=>({
+      teamId: r.id,
+      teamName: r.name,
+      rank: r.rank,
+      played: r.played,
+      w: r.w, d: r.d, l: r.l,
+      gf: r.gf, ga: r.ga, gd: r.gd,
+      pts: r.pts
+    }));
+    const snap = {
+      seasonId: season.id,
+      seasonName: season.name,
+      savedAt: Date.now(),
+      rows,
+      matches: div.matches.slice()
+    };
+    season.history[div.id] = season.history[div.id] || [];
+    season.history[div.id].push(snap);
+  }
+  season.endedAt = Date.now();
+  saveDB();
+  toast('シーズン戦績を保存しました');
+}
+
+function openSeasonMatchesModal(teamId, payload){
+  const root = document.createElement('div');
+  root.appendChild(sectionTitle(`${payload.seasonName} / ${payload.divName}：全節スコア`));
+
+  const mapTeams = new Map(payload.teams.map(t=>[t.id,t]));
+  const all = (payload.matches||[]).filter(m=>m.homeId===teamId||m.awayId===teamId).sort((a,b)=>a.round-b.round);
+
+  const box = document.createElement('div');
+  box.className='list';
+  box.style.padding='0';
+
+  if(all.length===0){
+    box.innerHTML = `<div class="smallHint" style="padding:6px 2px;">スコアがありません</div>`;
+  }else{
+    all.forEach(m=> box.appendChild(matchRowEl(m, mapTeams, {editable:false, showRound:true})));
+  }
+  root.appendChild(box);
+  openModal('全節スコア', root, footerButtons([{text:'閉じる', onClick: closeModal}]));
+}
+
+// --- Buttons & events
   document.querySelectorAll('.segBtn').forEach(b=>{
     b.addEventListener('click', ()=> setTab(b.dataset.tab));
   });
@@ -1469,7 +1601,7 @@
     root.appendChild(p);
     openModal('確認', root, footerButtons([
       {text:'キャンセル', onClick: closeModal},
-      {text:'保存する', onClick: ()=>{ endSeason(); closeModal(); render(); }}
+      {text:'保存する', onClick: ()=>{ endSeasonWithMatches(); closeModal(); render(); }}
     ]));
   });
 
@@ -1479,7 +1611,13 @@
     setTab('standings');
   });
 
-  // --- Render
+  
+  // Tap league/season (top bar) to switch
+  byId('leagueLogoWrap').addEventListener('click', openLeagueSeasonSwitcher);
+  byId('leagueName').addEventListener('click', openLeagueSeasonSwitcher);
+  byId('seasonName').addEventListener('click', openLeagueSeasonSwitcher);
+
+// --- Render
   function render(){
     renderTop();
     renderDivSwitch();

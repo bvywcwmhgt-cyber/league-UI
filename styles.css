@@ -1,8 +1,8 @@
 /* League UI - tablet friendly, dark glass */
 :root{
   --bg:#05070d;
-  --glass: rgba(12,18,34,.70);
-  --glass2: rgba(12,18,34,.55);
+  --glass: rgba(10,15,30,.66);
+  --glass2: rgba(12,18,34,.58);
   --line: rgba(255,255,255,.08);
   --line2: rgba(255,255,255,.12);
   --txt: rgba(255,255,255,.92);
@@ -28,7 +28,7 @@ body{
     radial-gradient(1200px 600px at 20% 20%, rgba(55,90,210,.12), transparent 62%),
     radial-gradient(900px 520px at 82% 28%, rgba(210,70,190,.08), transparent 58%),
     radial-gradient(900px 650px at 45% 88%, rgba(50,220,170,.06), transparent 62%),
-    linear-gradient(180deg, #03040a, #040611 45%, #020309);
+    linear-gradient(180deg, #03050c, #03040a 45%, #020309);
   overflow-x:hidden;
 }
 
@@ -186,22 +186,23 @@ tbody td{
 td.num, th.colNum { text-align:center; }
 
 .rankCell{
+  position: relative;
   display:flex;
   align-items:center;
   gap: 10px;
+  padding-left: 10px;
 }
+
 .rankBand{
+  position:absolute;
+  left:0;
+  top:0;
+  bottom:0;
   width: 4px;
-  /* stretch the full row height like the reference UI */
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  height: auto;
   border-radius: 6px;
   background: transparent;
-  pointer-events: none;
 }
+
 .rankCell{ padding-left: 8px; }
 .rankText{ width: 46px; text-align:center; color: var(--txt); }
 .rankArrow{
@@ -424,3 +425,6 @@ hr.sep{
   .matchRow{ grid-template-columns: 1fr auto 1fr; grid-template-areas: "home score away" "kick kick kick"; }
   .kick{ grid-area: kick; text-align:center; }
 }
+
+/* Rank band full-height */
+td.colRank{ position: relative; }
