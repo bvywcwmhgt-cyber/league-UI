@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>League UI</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <button class="iconbtn" id="btnBack" aria-label="back" title="戻る">‹</button>
+        <div class="brandLogo" id="leagueLogoWrap">
+          <img id="leagueLogo" alt="" />
+          <div class="logoFallback" id="leagueLogoFallback">🏳️</div>
+        </div>
+        <div class="brandMeta">
+          <div class="brandTitle" id="leagueName">League</div>
+          <div class="brandSub">
+            <span id="seasonName">Season 1</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="topControls">
+        <div class="seg">
+          <button class="segBtn" id="tabStandings" data-tab="standings">順位表</button>
+          <button class="segBtn" id="tabSchedule" data-tab="schedule">日程</button>
+          <button class="segBtn" id="tabResults" data-tab="results">結果</button>
+          <button class="segBtn" id="tabClubs" data-tab="clubs">クラブ</button>
+        </div>
+        <div class="actions">
+          <button class="pill" id="btnManage">管理</button>
+          <button class="pill" id="btnNewSeason">新シーズン作成</button>
+          <button class="pill warn" id="btnEndSeason">シーズン終了</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="content">
+      <section class="card hero">
+        <div class="heroLeft">
+          <div class="divSwitch" id="divSwitch"></div>
+        </div>
+        <div class="heroRight">
+          <button class="pill" id="btnRankColors">順位カラー編集</button>
+          <button class="pill" id="btnGenSchedule">日程生成</button>
+          <button class="pill" id="btnHistory">戦績（歴代）</button>
+        </div>
+      </section>
+
+      <section class="card" id="viewStandings">
+        <div class="cardHeader">
+          <h2>リーグ順位表</h2>
+          <div class="smallHint" id="standingsHint">チーム名をタップするとクラブ詳細へ</div>
+        </div>
+        <div class="tableWrap">
+          <table class="standings">
+            <thead>
+              <tr>
+                <th class="colRank">順位</th>
+                <th class="colTeam">チーム</th>
+                <th class="colNum">試合</th>
+                <th class="colNum">勝</th>
+                <th class="colNum">分</th>
+                <th class="colNum">負</th>
+                <th class="colNum">得点</th>
+                <th class="colNum">失点</th>
+                <th class="colNum">差</th>
+                <th class="colNum">勝点</th>
+                <th class="colForm">調子</th>
+              </tr>
+            </thead>
+            <tbody id="standingsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card hidden" id="viewSchedule">
+        <div class="cardHeader">
+          <h2>試合日程</h2>
+          <div class="roundPager">
+            <button class="iconbtn" id="btnPrevRound" aria-label="prev">‹</button>
+            <div class="roundLabel" id="roundLabel">Div.1 第1節</div>
+            <button class="iconbtn" id="btnNextRound" aria-label="next">›</button>
+          </div>
+        </div>
+        <div class="list" id="scheduleList"></div>
+      </section>
+
+      <section class="card hidden" id="viewResults">
+        <div class="cardHeader">
+          <h2>結果</h2>
+          <button class="pill" id="btnAllResults">全結果</button>
+        </div>
+        <div class="list" id="resultsList"></div>
+      </section>
+
+      <section class="card hidden" id="viewClubs">
+        <div class="cardHeader">
+          <h2>クラブ一覧</h2>
+          <div class="smallHint">クラブをタップで詳細（戦績/今後の対戦/結果）</div>
+        </div>
+        <div class="clubGrid" id="clubGrid"></div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast"></div>
+
+    <!-- Modal -->
+    <div class="modalOverlay hidden" id="modalOverlay" aria-hidden="true">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="modalHeader">
+          <div class="modalTitle" id="modalTitle">Modal</div>
+          <button class="iconbtn" id="modalClose" aria-label="close">×</button>
+        </div>
+        <div class="modalBody" id="modalBody"></div>
+        <div class="modalFooter" id="modalFooter"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
