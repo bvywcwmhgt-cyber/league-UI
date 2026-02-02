@@ -816,10 +816,29 @@
     const badge = document.createElement('div');
     badge.className='badge';
     badge.style.width='82px'; badge.style.height='82px'; badge.style.borderRadius='26px';
+    badge.style.cursor = 'pointer';
+    badge.title = 'タップしてロゴ画像を設定';
     const img = document.createElement('img');
     const fb = document.createElement('div'); fb.className='fallback'; fb.textContent='🏳️';
     badge.appendChild(img); badge.appendChild(fb);
     if(team.logoDataUrl){ img.src=team.logoDataUrl; img.style.display='block'; fb.style.display='none'; }
+
+    // Hidden file input for logo
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.style.display = 'none';
+    fileInput.onchange = async ()=>{
+      const file = fileInput.files && fileInput.files[0];
+      if(!file) return;
+      team.logoDataUrl = await readFileAsDataURL(file);
+      // reflect immediately
+      img.src = team.logoDataUrl;
+      img.style.display='block';
+      fb.style.display='none';
+      toast('ロゴを設定しました');
+    };
+    badge.addEventListener('click', ()=> fileInput.click());
 
     const meta = document.createElement('div');
     meta.style.flex='1';
@@ -833,8 +852,15 @@
     meta.appendChild(title); meta.appendChild(sub);
 
     top.appendChild(badge);
+    top.appendChild(fileInput);
     top.appendChild(meta);
     root.appendChild(top);
+
+    root.appendChild(hr());
+
+    // Editable team name
+    root.appendChild(sectionTitle('クラブ名'));
+    root.appendChild(fieldText('チーム名', team.name, (v)=>{ team.name = v; title.textContent = v; }));
 
     root.appendChild(hr());
 
@@ -1292,12 +1318,25 @@
     f.className='field';
     const l = document.createElement('label');
     l.textContent = labelText;
+    const wrap = document.createElement('div');
+    wrap.className = 'colorPickerWrap';
+
     const input = document.createElement('input');
-    input.type='text';
-    input.value = value || '#ffffff';
-    input.placeholder = '#RRGGBB';
+    input.type='color';
+    // Ensure valid hex for <input type="color">
+    const safe = (typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)) ? value : '#ffffff';
+    input.value = safe;
     input.oninput = ()=> onChange(input.value);
-    f.appendChild(l); f.appendChild(input);
+
+    const hex = document.createElement('div');
+    hex.className='smallHint';
+    hex.textContent = safe.toUpperCase();
+    input.addEventListener('input', ()=> { hex.textContent = input.value.toUpperCase(); });
+
+    wrap.appendChild(input);
+    wrap.appendChild(hex);
+
+    f.appendChild(l); f.appendChild(wrap);
     return f;
   }
 

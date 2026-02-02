@@ -368,6 +368,29 @@ input[type="text"], input[type="number"], textarea, select{
   outline:none;
   font-size: 13px;
 }
+
+/* Color input (rank color editor) */
+.colorPickerWrap{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+input[type="color"]{
+  width:56px;
+  height:44px;
+  border:none;
+  padding:0;
+  background:transparent;
+}
+input[type="color"]::-webkit-color-swatch-wrapper{ padding:0; }
+input[type="color"]::-webkit-color-swatch{
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 14px;
+}
+input[type="color"]::-moz-color-swatch{
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 14px;
+}
 textarea{ min-height: 92px; resize: vertical; }
 .row2{ display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .btnRow{ display:flex; gap: 10px; flex-wrap:wrap; }
