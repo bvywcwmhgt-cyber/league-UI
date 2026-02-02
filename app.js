@@ -1388,6 +1388,16 @@ root.appendChild(box);
   }
 
   
+
+  function renameSeason(){
+    const season = getSeason();
+    const name = prompt('シーズン名を入力', season.name);
+    if(!name) return;
+    season.name = name;
+    saveDB();
+    renderAll();
+  }
+
 // --- Switcher modals (League / Season)
 function openLeagueSeasonSwitcher(){
   const root = document.createElement('div');
@@ -1616,6 +1626,7 @@ function openSeasonMatchesModal(teamId, payload){
   byId('leagueLogoWrap').addEventListener('click', openLeagueSeasonSwitcher);
   byId('leagueName').addEventListener('click', openLeagueSeasonSwitcher);
   byId('seasonName').addEventListener('click', openLeagueSeasonSwitcher);
+  byId('seasonName').addEventListener('dblclick', renameSeason);
 
 // --- Render
   function render(){
