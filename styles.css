@@ -100,6 +100,11 @@ body{
   font-size: 13px;
   cursor:pointer;
 }
+.pill.small{
+  padding: 8px 12px;
+  border-radius: 14px;
+  font-size: 12px;
+}
 .pill:hover{ background: rgba(255,255,255,.10); }
 .pill.warn{ border-color: rgba(255,120,120,.35); }
 
