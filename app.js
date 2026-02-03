@@ -1686,7 +1686,9 @@ root.appendChild(box);
     b.className = 'pill' + (extraClass?(' '+extraClass):'');
     b.textContent = text;
     b.type='button';
-    b.onclick = (e)=>{ e.preventDefault(); onClick(); };
+    // Avoid preventDefault() here: iOS Safari can occasionally swallow clicks
+    // for buttons inside scrollable modal dialogs.
+    b.onclick = (e)=>{ e.stopPropagation(); onClick(); };
     return b;
   }
   function footerButtons(btns){
