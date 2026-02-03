@@ -1686,9 +1686,14 @@ root.appendChild(box);
     b.className = 'pill' + (extraClass?(' '+extraClass):'');
     b.textContent = text;
     b.type='button';
-    // Avoid preventDefault() here: iOS Safari can occasionally swallow clicks
-    // for buttons inside scrollable modal dialogs.
-    b.onclick = (e)=>{ e.stopPropagation(); onClick(); };
+    // Make taps reliable on mobile Safari (some "click" events can be flaky
+    // inside scrollable / backdrop-filtered modals).
+    const fire = (e)=>{
+      if (e) { e.stopPropagation(); }
+      try { onClick && onClick(); } catch (err) { console.error(err); }
+    };
+    b.addEventListener('click', fire);
+    b.addEventListener('touchend', (e)=>{ e.preventDefault(); fire(e); }, {passive:false});
     return b;
   }
   function footerButtons(btns){
